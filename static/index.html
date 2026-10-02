@@ -194,6 +194,8 @@
               <i class="fa-solid fa-plus"></i>
               <span>자산 추가</span>
             </button>
+          </div>
+
           <!-- 자산 복구 배너 (서버 초기화 시 브라우저 백업에서 즉시 복구) -->
           <div id="restore-banner" class="hidden bg-indigo-950/80 border border-indigo-500/50 p-3 rounded-2xl flex items-center justify-between text-xs shadow-lg">
             <div class="flex items-center space-x-2">
@@ -1038,7 +1040,17 @@
     }
 
     function renderAllocationChart(assets) {
-      if (!assets || assets.length === 0) return;
+      const container = document.getElementById('allocation-chart');
+      if (!container) return;
+      if (!assets || assets.length === 0) {
+        if (donutChart) {
+          try { donutChart.destroy(); } catch(e){}
+          donutChart = null;
+        }
+        container.innerHTML = `<div class="text-center py-10 text-xs text-slate-500">등록된 자산이 없습니다.</div>`;
+        return;
+      }
+      container.innerHTML = '';
       const labels = assets.map(a => a.name);
       const series = assets.map(a => a.weight_pct);
 
