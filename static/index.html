@@ -468,40 +468,11 @@
               </button>
             </div>
 
-            <!-- 최근/자주찾는 종목 드롭다운 메뉴 -->
-            <div id="dropdown-symbols" class="hidden mt-1.5 bg-slate-800 border border-slate-700 rounded-xl p-2 shadow-2xl space-y-1 text-xs max-h-48 overflow-y-auto z-50">
-              <div class="text-[10px] font-bold text-slate-500 px-2 py-0.5">자주 찾는 ETF & 달러 RP</div>
-              <div onclick="selectPresetSymbol('458730')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
-                <span class="font-medium text-white">TIGER 미국배당다우존스</span>
-                <span class="text-[10px] text-emerald-400 font-mono">458730</span>
-              </div>
-              <div onclick="selectPresetSymbol('360750')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
-                <span class="font-medium text-white">TIGER 미국S&P500 (25,780원)</span>
-                <span class="text-[10px] text-emerald-400 font-mono">360750</span>
-              </div>
-              <div onclick="selectPresetSymbol('379810')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
-                <span class="font-medium text-white">KODEX 미국나스닥100</span>
-                <span class="text-[10px] text-emerald-400 font-mono">379810</span>
-              </div>
-              <div onclick="selectPresetSymbol('379800')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
-                <span class="font-medium text-white">KODEX 미국S&P500</span>
-                <span class="text-[10px] text-emerald-400 font-mono">379800</span>
-              </div>
-              <div onclick="selectPresetSymbol('069500')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
-                <span class="font-medium text-white">KODEX 200</span>
-                <span class="text-[10px] text-emerald-400 font-mono">069500</span>
-              </div>
-              <div onclick="selectPresetSymbol('SCHD')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
-                <span class="font-medium text-white">Schwab US Dividend Equity (SCHD)</span>
-                <span class="text-[10px] text-indigo-400 font-mono">SCHD</span>
-              </div>
-              <div onclick="selectPresetSymbol('VOO')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
-                <span class="font-medium text-white">Vanguard S&P 500 (VOO)</span>
-                <span class="text-[10px] text-indigo-400 font-mono">VOO</span>
-              </div>
-              <div onclick="selectPresetSymbol('USD_RP')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center border-t border-slate-700/40">
-                <span class="font-medium text-blue-400">온라인전용_수시RP(USD)</span>
-                <span class="text-[10px] text-blue-400 font-mono">외화RP</span>
+            <!-- 최근 입력 기록 기반 동적 드롭다운 메뉴 -->
+            <div id="dropdown-symbols" class="hidden mt-1.5 bg-slate-800 border border-slate-700 rounded-xl p-2 shadow-2xl space-y-1 text-xs max-h-52 overflow-y-auto z-50">
+              <div class="text-[10px] font-bold text-slate-500 px-2 py-0.5">내가 입력했던 종목 기록</div>
+              <div id="recent-symbols-list" class="space-y-1">
+                <!-- 동적으로 최근 입력 기록 렌더링 -->
               </div>
             </div>
           </div>
@@ -1413,13 +1384,49 @@
       return s.replace('.KS', '');
     }
 
-    // 드롭다운 열기/닫기
+    // 내 입력 기록 불러오기 및 드롭다운 렌더링
     function toggleRecentSymbolsDropdown() {
       const drop = document.getElementById('dropdown-symbols');
+      const listEl = document.getElementById('recent-symbols-list');
+
+      // 로컬스토리지에서 최근 사용자가 입력했던 종목들 가져오기
+      const historyJson = localStorage.getItem('user_symbol_history');
+      let history = historyJson ? JSON.parse(historyJson) : [];
+
+      // 현재 등록되어 있는 자산들도 기록에 자동 포함
+      if (summaryData && summaryData.assets) {
+        summaryData.assets.forEach(a => {
+          if (!history.find(h => h.symbol === a.symbol)) {
+            history.unshift({ symbol: a.symbol, name: a.name });
+          }
+        });
+      }
+
+      if (history.length === 0) {
+        listEl.innerHTML = `<div class="text-[11px] text-slate-500 py-3 text-center">아직 입력한 종목 기록이 없습니다.</div>`;
+      } else {
+        listEl.innerHTML = history.slice(0, 10).map(h => `
+          <div onclick="selectPresetSymbol('${h.symbol}')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center transition">
+            <span class="font-medium text-white">${h.name}</span>
+            <span class="text-[10px] text-emerald-400 font-mono">${h.symbol}</span>
+          </div>
+        `).join('');
+      }
+
       drop.classList.toggle('hidden');
     }
 
-    // 목록에서 종목 클릭 시 자동 선택 및 조회
+    // 종목 저장 시 내 히스토리에 자동 추가
+    function addSymbolToHistory(symbol, name) {
+      if (!symbol || !name) return;
+      try {
+        let history = JSON.parse(localStorage.getItem('user_symbol_history') || '[]');
+        history = history.filter(h => h.symbol !== symbol);
+        history.unshift({ symbol, name });
+        localStorage.setItem('user_symbol_history', JSON.stringify(history.slice(0, 15)));
+      } catch (e) {}
+    }
+
     function selectPresetSymbol(sym) {
       document.getElementById('form-symbol').value = sym;
       document.getElementById('dropdown-symbols').classList.add('hidden');
@@ -1551,6 +1558,9 @@
           symbol, name, asset_type: type, currency, quantity: qty, avg_price: avg, current_price: curPrice, target_weight: tw, dividend_yield: dy
         })
       });
+
+      // 내 입력 기록 히스토리에 종목 저장
+      addSymbolToHistory(symbol, name);
 
       closeAddAssetModal();
       loadSummary();
