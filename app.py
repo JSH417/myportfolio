@@ -188,10 +188,11 @@ def add_or_update_asset(data: dict):
     target_weight = float(data.get("target_weight", 0))
     dividend_yield = float(data.get("dividend_yield", 0))
     div_frequency = data.get("div_frequency", "QUARTERLY")
+    account = data.get("account", "ISA").strip()
 
     c.execute("""
-        INSERT INTO assets (symbol, name, asset_type, currency, quantity, avg_price, current_price, target_weight, dividend_yield, div_frequency, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO assets (symbol, name, asset_type, currency, quantity, avg_price, current_price, target_weight, dividend_yield, div_frequency, account, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(symbol) DO UPDATE SET
             name=excluded.name,
             asset_type=excluded.asset_type,
@@ -202,8 +203,9 @@ def add_or_update_asset(data: dict):
             target_weight=excluded.target_weight,
             dividend_yield=excluded.dividend_yield,
             div_frequency=excluded.div_frequency,
+            account=excluded.account,
             updated_at=CURRENT_TIMESTAMP
-    """, (symbol, name, asset_type, currency, quantity, avg_price, current_price, target_weight, dividend_yield, div_frequency))
+    """, (symbol, name, asset_type, currency, quantity, avg_price, current_price, target_weight, dividend_yield, div_frequency, account))
     conn.commit()
     conn.close()
     return {"status": "success"}

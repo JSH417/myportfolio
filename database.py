@@ -27,10 +27,16 @@ def init_db():
         target_weight REAL DEFAULT 0,      -- 목표 비중 (%)
         dividend_yield REAL DEFAULT 0,     -- 연간 예상 배당률 (%)
         div_frequency TEXT DEFAULT 'QUARTERLY', -- 'MONTHLY', 'QUARTERLY', 'YEARLY', 'NONE'
+        account TEXT DEFAULT 'ISA',        -- 'CMA', 'ISA', '연금저축', '달러RP'
         note TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """)
+
+    # 계좌 컬럼 자동 마이그레이션 확인
+    cols = [r[1] for r in cursor.execute("PRAGMA table_info(assets)").fetchall()]
+    if "account" not in cols:
+        cursor.execute("ALTER TABLE assets ADD COLUMN account TEXT DEFAULT 'ISA'")
 
     # 2. Transactions table (매매 및 입출금 내역)
     cursor.execute("""

@@ -59,6 +59,38 @@
       <!-- ================= TAB 1: 대시보드 (자산 현황) ================= -->
       <div id="tab-dashboard" class="space-y-4">
         
+        <!-- 계좌별 선택 및 묶어서 보기 스마트 필터 바 -->
+        <div class="bg-slate-800/40 p-2.5 rounded-2xl border border-slate-800 space-y-1.5">
+          <div class="flex justify-between items-center px-1">
+            <span class="text-[11px] font-bold text-slate-400 flex items-center space-x-1">
+              <i class="fa-solid fa-wallet text-emerald-400 text-xs"></i>
+              <span>계좌 선택 (묶어보기 가능)</span>
+            </span>
+            <span id="selected-account-label" class="text-[10px] text-emerald-400 font-semibold font-mono">
+              전체 계좌 통합
+            </span>
+          </div>
+
+          <!-- 복수 선택 가능한 계좌 칩 버튼들 -->
+          <div class="flex space-x-1.5 overflow-x-auto hide-scrollbar py-0.5" id="account-filter-container">
+            <button onclick="toggleAccountFilter('ALL')" id="filter-all" class="account-chip px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 transition flex items-center space-x-1">
+              <span>전체</span>
+            </button>
+            <button onclick="toggleAccountFilter('CMA')" id="filter-CMA" class="account-chip px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 transition flex items-center space-x-1">
+              <span>CMA</span>
+            </button>
+            <button onclick="toggleAccountFilter('ISA')" id="filter-ISA" class="account-chip px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 transition flex items-center space-x-1">
+              <span>ISA</span>
+            </button>
+            <button onclick="toggleAccountFilter('연금저축')" id="filter-연금저축" class="account-chip px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 transition flex items-center space-x-1">
+              <span>연금저축</span>
+            </button>
+            <button onclick="toggleAccountFilter('달러RP')" id="filter-달러RP" class="account-chip px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 transition flex items-center space-x-1">
+              <span>달러RP</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Total Assets Summary Card (클릭 시 계좌 자산 변화 추이 그래프 화면으로 즉시 전환) -->
         <div onclick="switchToHistoryTab()" class="card-touch bg-gradient-to-br from-slate-800 to-slate-800/90 p-5 rounded-2xl border border-slate-700/60 shadow-lg cursor-pointer hover:border-emerald-500/50 relative overflow-hidden group">
           <div class="flex justify-between items-start">
@@ -443,6 +475,16 @@
 
         <div class="space-y-3 text-xs">
           <div>
+            <label class="text-slate-400 block mb-1">소속 계좌</label>
+            <select id="form-account" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-medium">
+              <option value="ISA">ISA (개인종합자산관리계좌)</option>
+              <option value="연금저축">연금저축 / IRP</option>
+              <option value="CMA">CMA / 일반 수시계좌</option>
+              <option value="달러RP">달러RP / 해외 직투계좌</option>
+            </select>
+          </div>
+
+          <div>
             <label class="text-slate-400 block mb-1">자산 분류</label>
             <select id="form-asset-type" onchange="handleAssetTypeChange()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
               <option value="KR_ETF">국내 상장 ETF (원화)</option>
@@ -645,25 +687,110 @@
       }
     }
 
-    function renderDashboard(data) {
-      document.getElementById('current-rate').innerText = `1$ = ${data.rate.toLocaleString()}원`;
-      document.getElementById('total-val-krw').innerText = `${Math.round(data.total_value_krw).toLocaleString()}원`;
-      document.getElementById('total-val-usd').innerText = `($${data.total_value_usd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+    // 선택된 계좌 목록 (기본값: 'ALL')
+    let selectedAccounts = ['ALL'];
 
-      const pnlSign = data.total_pnl_krw >= 0 ? '+' : '';
-      const pnlColor = data.total_pnl_krw >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    function toggleAccountFilter(acc) {
+      if (acc === 'ALL') {
+        selectedAccounts = ['ALL'];
+      } else {
+        // 'ALL'이 켜져있었다면 끄고 단일 선택으로 시작
+        selectedAccounts = selectedAccounts.filter(a => a !== 'ALL');
+        if (selectedAccounts.includes(acc)) {
+          selectedAccounts = selectedAccounts.filter(a => a !== acc);
+          // 다 꺼졌으면 다시 ALL로
+          if (selectedAccounts.length === 0) selectedAccounts = ['ALL'];
+        } else {
+          selectedAccounts.push(acc);
+        }
+      }
+
+      updateAccountFilterUI();
+      if (summaryData) renderDashboard(summaryData);
+      if (currentTab === 'rebalance') renderRebalanceTab();
+      if (currentTab === 'dividend') renderDividendTab();
+    }
+
+    function updateAccountFilterUI() {
+      const label = document.getElementById('selected-account-label');
+      if (selectedAccounts.includes('ALL')) {
+        label.innerText = '전체 계좌 통합';
+      } else {
+        label.innerText = selectedAccounts.join(' + ') + ' 합산';
+      }
+
+      ['ALL', 'CMA', 'ISA', '연금저축', '달러RP'].forEach(acc => {
+        const btn = document.getElementById(acc === 'ALL' ? 'filter-all' : `filter-${acc}`);
+        if (!btn) return;
+        const isSelected = selectedAccounts.includes(acc);
+        if (isSelected) {
+          btn.className = 'account-chip px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 shadow-md transition flex items-center space-x-1';
+        } else {
+          btn.className = 'account-chip px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white transition flex items-center space-x-1';
+        }
+      });
+    }
+
+    function getFilteredAssets(allAssets) {
+      if (!allAssets) return [];
+      if (selectedAccounts.includes('ALL')) return allAssets;
+      return allAssets.filter(a => selectedAccounts.includes(a.account || 'ISA'));
+    }
+
+    function renderDashboard(data) {
+      const filteredAssets = getFilteredAssets(data.assets);
+      const rate = data.rate;
+
+      // 선택된 계좌들의 자산만 재합산
+      let total_val_krw = 0.0;
+      let total_invested_krw = 0.0;
+      let krw_assets_val = 0.0;
+      let usd_assets_usd = 0.0;
+      let usd_rp_val_usd = 0.0;
+
+      filteredAssets.forEach(a => {
+        const valKrw = a.eval_value_krw;
+        const invKrw = (a.currency === 'KRW') ? a.invested_value : a.invested_value * rate;
+        total_val_krw += valKrw;
+        total_invested_krw += invKrw;
+
+        if (a.currency === 'KRW') {
+          krw_assets_val += valKrw;
+        } else {
+          usd_assets_usd += a.eval_value;
+          if (a.asset_type === 'USD_RP') {
+            usd_rp_val_usd += a.eval_value;
+          }
+        }
+      });
+
+      const total_val_usd = rate > 0 ? total_val_krw / rate : 0.0;
+      const total_pnl_krw = total_val_krw - total_invested_krw;
+      const total_pnl_pct = total_invested_krw > 0 ? (total_pnl_krw / total_invested_krw * 100) : 0.0;
+
+      // 각 자산의 선택 계좌 내 비중 재계산
+      filteredAssets.forEach(a => {
+        a.filtered_weight_pct = total_val_krw > 0 ? ((a.eval_value_krw / total_val_krw) * 100).toFixed(1) : 0.0;
+      });
+
+      document.getElementById('current-rate').innerText = `1$ = ${rate.toLocaleString()}원`;
+      document.getElementById('total-val-krw').innerText = `${Math.round(total_val_krw).toLocaleString()}원`;
+      document.getElementById('total-val-usd').innerText = `($${total_val_usd.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`;
+
+      const pnlSign = total_pnl_krw >= 0 ? '+' : '';
+      const pnlColor = total_pnl_krw >= 0 ? 'text-emerald-400' : 'text-rose-400';
       const pnlEl = document.getElementById('total-pnl');
       pnlEl.className = `font-bold ${pnlColor}`;
-      pnlEl.innerText = `${pnlSign}${Math.round(data.total_pnl_krw).toLocaleString()}원 (${pnlSign}${data.total_pnl_pct.toFixed(2)}%)`;
+      pnlEl.innerText = `${pnlSign}${Math.round(total_pnl_krw).toLocaleString()}원 (${pnlSign}${total_pnl_pct.toFixed(2)}%)`;
 
-      document.getElementById('total-invested').innerText = `${Math.round(data.total_invested_krw).toLocaleString()}원`;
-      document.getElementById('usd-assets-total').innerText = `$${data.usd_assets_usd.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-      document.getElementById('usd-rp-breakdown').innerText = `(외화 RP: $${data.usd_rp_val_usd.toLocaleString(undefined, {minimumFractionDigits: 2})})`;
-      document.getElementById('krw-assets-total').innerText = `${Math.round(data.krw_assets_krw).toLocaleString()}원`;
+      document.getElementById('total-invested').innerText = `${Math.round(total_invested_krw).toLocaleString()}원`;
+      document.getElementById('usd-assets-total').innerText = `$${usd_assets_usd.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+      document.getElementById('usd-rp-breakdown').innerText = `(외화 RP: $${usd_rp_val_usd.toLocaleString(undefined, {minimumFractionDigits: 2})})`;
+      document.getElementById('krw-assets-total').innerText = `${Math.round(krw_assets_val).toLocaleString()}원`;
 
-      // RP 전용 카드 동적 바인딩 (자산 삭제 시 자동 숨김)
+      // RP 전용 카드 동적 바인딩 (선택된 계좌에 RP가 있을 때만 표시)
       const rpCardContainer = document.getElementById('rp-dedicated-card');
-      const rpAsset = data.assets.find(a => a.symbol === 'USD_RP' && a.quantity > 0);
+      const rpAsset = filteredAssets.find(a => a.symbol === 'USD_RP' && a.quantity > 0);
       if (rpAsset) {
         rpCardContainer.classList.remove('hidden');
         document.getElementById('rp-card-name').innerText = rpAsset.name;
@@ -673,12 +800,11 @@
         document.getElementById('rp-daily-earn').innerText = `+$${rpAsset.rp_daily_interest_usd || 0.0051} /일`;
         document.getElementById('rp-monthly-earn').innerText = `(월 예상 약 +$${rpAsset.rp_monthly_interest_usd || 0.15})`;
       } else {
-        // RP 자산이 없거나 삭제되었으면 전용 카드 숨김
         rpCardContainer.classList.add('hidden');
       }
 
-      renderAllocationChart(data.assets);
-      renderAssetsList(data.assets, data.rate);
+      renderAllocationChart(filteredAssets);
+      renderAssetsList(filteredAssets, rate);
     }
 
     // ================= 계좌 총 자산 변화 추이 그래프 =================
@@ -839,12 +965,22 @@
           `;
         }
 
+        // 계좌 뱃지 스타일
+        const acc = a.account || 'ISA';
+        let accBg = 'bg-slate-700 text-slate-300';
+        if (acc === 'ISA') accBg = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        else if (acc === 'CMA') accBg = 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
+        else if (acc === '연금저축') accBg = 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
+        else if (acc === '달러RP') accBg = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
+
+        const displayWeight = a.filtered_weight_pct || a.weight_pct;
+
         let rightSideHtml = '';
         if (isCashType) {
           rightSideHtml = `
             <div class="font-bold text-xs text-slate-200">
               <span class="privacy-target">${currSym}${a.eval_value.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span>
-              <span class="text-[10px] text-slate-500 font-normal">(${a.weight_pct}%)</span>
+              <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
             </div>
             <div class="text-[11px] text-blue-400 font-medium">
               ${a.dividend_yield > 0 ? `일할 이자 적립 중` : `현금 자산`}
@@ -854,7 +990,7 @@
           rightSideHtml = `
             <div class="font-bold text-xs text-slate-200">
               <span class="privacy-target">${currSym}${a.eval_value.toLocaleString()}</span>
-              <span class="text-[10px] text-slate-500 font-normal">(${a.weight_pct}%)</span>
+              <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
             </div>
             <div class="text-xs ${pnlColor} font-medium">
               ${pnlSign}${currSym}${Math.abs(a.pnl).toLocaleString()} (${pnlSign}${a.pnl_pct.toFixed(2)}%)
@@ -865,8 +1001,9 @@
         return `
           <div class="bg-slate-800/60 p-3.5 rounded-xl border border-slate-800 flex justify-between items-center">
             <div class="space-y-1">
-              <div class="flex items-center space-x-1.5">
+              <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
                 <span class="font-bold text-sm text-white">${a.name}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${accBg}">${acc}</span>
                 <span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${badgeBg}">${badgeText}</span>
               </div>
               <div class="text-[11px] text-slate-400 flex items-center space-x-2">
@@ -1450,12 +1587,15 @@
         document.getElementById('form-target-weight').value = '';
         document.getElementById('form-dividend-yield').value = '';
         document.getElementById('form-asset-type').value = 'KR_ETF';
+        const defaultAcc = (selectedAccounts.length === 1 && selectedAccounts[0] !== 'ALL') ? selectedAccounts[0] : 'ISA';
+        document.getElementById('form-account').value = defaultAcc;
         handleAssetTypeChange();
       } else {
         // 기존 종목 수정 모드
         document.getElementById('form-symbol').value = asset.symbol;
         document.getElementById('form-name').value = asset.name;
         document.getElementById('form-asset-type').value = asset.asset_type;
+        document.getElementById('form-account').value = asset.account || 'ISA';
         handleAssetTypeChange();
         if (asset.asset_type === 'USD_RP' || asset.asset_type.startsWith('CASH')) {
           document.getElementById('form-cash-amount').value = asset.quantity;
@@ -1490,6 +1630,7 @@
           nameInput.value = '온라인전용_수시RP(USD)';
           labelCash.innerText = '보유 달러 잔액 ($)';
           document.getElementById('form-dividend-yield').value = 3.35;
+          document.getElementById('form-account').value = '달러RP';
         } else if (type === 'CASH_USD') {
           symInput.value = 'CASH_USD';
           nameInput.value = '달러 예수금';
@@ -1500,6 +1641,7 @@
           nameInput.value = 'CMA / 원화 예수금';
           labelCash.innerText = '보유 원화 잔액 (원)';
           document.getElementById('form-dividend-yield').value = 3.0;
+          document.getElementById('form-account').value = 'CMA';
         }
       } else {
         groupQtyAvg.classList.remove('hidden');
@@ -1555,11 +1697,13 @@
         curPrice = searchedCurrentPrice > 0 ? searchedCurrentPrice : avg;
       }
 
+      const account = document.getElementById('form-account').value || 'ISA';
+
       await fetch('/api/asset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          symbol, name, asset_type: type, currency, quantity: qty, avg_price: avg, current_price: curPrice, target_weight: tw, dividend_yield: dy
+          symbol, name, asset_type: type, currency, quantity: qty, avg_price: avg, current_price: curPrice, target_weight: tw, dividend_yield: dy, account
         })
       });
 
