@@ -1439,6 +1439,7 @@
 
     function openAddAssetModal(asset = null) {
       const modal = document.getElementById('modal-asset');
+      searchedCurrentPrice = 0;
       if (!asset) {
         // 새 자산 추가 시 모든 필드 초기화 (이전 잔상 제거)
         document.getElementById('form-symbol').value = '';
@@ -1548,8 +1549,11 @@
       }
       const currency = (type === 'US_ETF' || type === 'USD_RP' || type === 'CASH_USD') ? 'USD' : 'KRW';
 
-      // 종목의 실시간 현재가 유지 (평단가로 덮어쓰지 않음)
-      const curPrice = searchedCurrentPrice > 0 ? searchedCurrentPrice : avg;
+      // 현금성 자산(RP, 예수금)은 단가가 무조건 1.0! ETF일 때만 실시간 현재가 적용
+      let curPrice = 1.0;
+      if (!isCash) {
+        curPrice = searchedCurrentPrice > 0 ? searchedCurrentPrice : avg;
+      }
 
       await fetch('/api/asset', {
         method: 'POST',
