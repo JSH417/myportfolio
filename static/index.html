@@ -622,7 +622,7 @@
             <input type="text" id="form-name" placeholder="티커를 입력하면 자동으로 채워집니다" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
           </div>
 
-          <div class="grid grid-cols-2 gap-2" id="group-qty-avg">
+          <div class="grid grid-cols-3 gap-2" id="group-qty-avg">
             <div>
               <label class="text-slate-400 block mb-1" id="label-qty">보유 주수</label>
               <input type="number" step="any" id="form-qty" placeholder="10" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
@@ -630,6 +630,10 @@
             <div>
               <label class="text-slate-400 block mb-1" id="label-avg">매입 단가</label>
               <input type="number" step="any" id="form-avg" placeholder="35000" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+            </div>
+            <div>
+              <label class="text-slate-400 block mb-1" id="label-current-price">현재가/시세</label>
+              <input type="number" step="any" id="form-current-price" placeholder="실시간" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-emerald-400 font-medium">
             </div>
           </div>
 
@@ -1896,6 +1900,8 @@
               }
               if (info.current_price && info.current_price > 0) {
                 searchedCurrentPrice = info.current_price;
+                const curPriceEl = document.getElementById('form-current-price');
+                if (curPriceEl) curPriceEl.value = info.current_price;
                 const avgInput = document.getElementById('form-avg');
                 // 평단가가 비어있으면 현재가를 추천 평단가로 제안
                 if (!avgInput.value) {
@@ -1908,6 +1914,8 @@
             } else {
               nameInput.value = '';
               searchedCurrentPrice = 0;
+              const curPriceEl = document.getElementById('form-current-price');
+              if (curPriceEl) curPriceEl.value = '';
             }
           }
         } catch (e) {
@@ -1978,12 +1986,14 @@
     function openAddAssetModal(asset = null) {
       const modal = document.getElementById('modal-asset');
       searchedCurrentPrice = 0;
+      const curPriceEl = document.getElementById('form-current-price');
       if (!asset) {
         // 새 자산 추가 시 모든 필드 초기화 (이전 잔상 제거)
         document.getElementById('form-symbol').value = '';
         document.getElementById('form-name').value = '';
         document.getElementById('form-qty').value = '';
         document.getElementById('form-avg').value = '';
+        if (curPriceEl) curPriceEl.value = '';
         document.getElementById('form-cash-amount').value = '';
         document.getElementById('form-target-weight').value = '';
         document.getElementById('form-dividend-yield').value = '';
@@ -1997,6 +2007,8 @@
         document.getElementById('form-name').value = asset.name;
         document.getElementById('form-asset-type').value = asset.asset_type;
         document.getElementById('form-account').value = asset.account || 'ISA';
+        searchedCurrentPrice = asset.current_price || asset.avg_price || 0;
+        if (curPriceEl) curPriceEl.value = asset.current_price || asset.avg_price || '';
         handleAssetTypeChange(false);
         if (asset.asset_type === 'USD_RP' || asset.asset_type.startsWith('CASH')) {
           document.getElementById('form-cash-amount').value = asset.quantity;
@@ -2087,9 +2099,13 @@
         if (type === 'KR_ETF') {
           document.getElementById('label-qty').innerText = '보유 주수';
           document.getElementById('label-avg').innerText = '평단가 (원)';
+          const curLabel = document.getElementById('label-current-price');
+          if (curLabel) curLabel.innerText = '현재가 (원)';
         } else if (type === 'US_ETF') {
           document.getElementById('label-qty').innerText = '보유 주수';
-          document.getElementById('label-avg').innerText = '평단가 (달러)';
+          document.getElementById('label-avg').innerText = '평단가 ($)';
+          const curLabel = document.getElementById('label-current-price');
+          if (curLabel) curLabel.innerText = '현재가 ($)';
         }
       }
     }
@@ -2130,7 +2146,13 @@
       // 현금성 자산(RP, 예수금)은 단가가 무조건 1.0! ETF일 때만 실시간 현재가 적용
       let curPrice = 1.0;
       if (!isCash) {
-        curPrice = searchedCurrentPrice > 0 ? searchedCurrentPrice : avg;
+        const curPriceEl = document.getElementById('form-current-price');
+        const manualCurPrice = curPriceEl ? parseFloat(curPriceEl.value) : 0;
+        if (!isNaN(manualCurPrice) && manualCurPrice > 0) {
+          curPrice = manualCurPrice;
+        } else {
+          curPrice = searchedCurrentPrice > 0 ? searchedCurrentPrice : avg;
+        }
       }
 
       const account = document.getElementById('form-account').value || 'ISA';

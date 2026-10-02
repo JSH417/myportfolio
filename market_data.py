@@ -48,42 +48,46 @@ def get_current_price(symbol: str, asset_type: str) -> float:
     """
     종목별 최신 현재가 조회
     - USD_RP, CASH 등은 단가 1.0 유지 (또는 1달러 = 1달러)
-    - KR_ETF: '069500' -> '069500.KS' (야후파이낸스 또는 네이버)
-    - US_ETF: 'VOO', 'QQQ', 'SCHD'
+    - KR_ETF (숫자 6자리): 네이버 증권 실시간 현재가 최우선 조회 (1원 단위 정확)
+    - US_ETF: yfinance fast_info 실시간 현재가 조회
     """
     if asset_type in ['USD_RP', 'CASH_USD']:
         return 1.0  # 달러 단위 기준 1$
     if asset_type == 'CASH_KRW':
         return 1.0  # 원화 단위 기준 1원
 
-    # 한국 ETF / 주식 심볼 정규화 (숫자 6자리인 경우)
+    # 1. 한국 종목 (숫자 6자리 or KR_ETF): 네이버 증권 실시간 현재가 최우선 조회
+    if re.match(r'^\d{6}$', symbol) or asset_type == 'KR_ETF':
+        clean_sym = re.sub(r'\D', '', symbol)
+        if len(clean_sym) == 6:
+            try:
+                url = f"https://m.stock.naver.com/api/stock/{clean_sym}/basic"
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                r = requests.get(url, headers=headers, timeout=4)
+                if r.status_code == 200:
+                    json_data = r.json()
+                    close_price = json_data.get("closePrice", "").replace(",", "")
+                    if close_price:
+                        return float(close_price)
+            except Exception as e:
+                print(f"네이버 실시간 시세 조회 실패 ({symbol}): {e}")
+
+    # 2. 미국 종목 / 글로벌 ETF (또는 네이버 실패 시 fallback): yfinance
     yf_symbol = symbol
     if re.match(r'^\d{6}$', symbol):
         yf_symbol = f"{symbol}.KS"
 
     try:
         ticker = yf.Ticker(yf_symbol)
-        data = ticker.history(period="1d", interval="1m")
-        if data.empty:
-            data = ticker.history(period="5d")
+        fast = getattr(ticker, 'fast_info', None)
+        if fast and hasattr(fast, 'last_price') and fast.last_price:
+            return round(float(fast.last_price), 2)
+
+        data = ticker.history(period="1d")
         if not data.empty:
             return round(float(data['Close'].iloc[-1]), 2)
     except Exception as e:
-        print(f"시세 조회 실패 ({symbol}): {e}")
-
-    # 한국 종목일 때 네이버 증권 간이 조회 백업
-    if re.match(r'^\d{6}$', symbol):
-        try:
-            url = f"https://m.stock.naver.com/api/stock/{symbol}/basic"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            r = requests.get(url, headers=headers, timeout=5)
-            if r.status_code == 200:
-                json_data = r.json()
-                close_price = json_data.get("closePrice", "").replace(",", "")
-                if close_price:
-                    return float(close_price)
-        except Exception as e:
-            print(f"네이버 시세 조회 실패 ({symbol}): {e}")
+        print(f"yfinance 시세 조회 실패 ({symbol}): {e}")
 
     return 0.0
 
