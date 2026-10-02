@@ -1,0 +1,5 @@
+cloudflared.exe
+__pycache__/
+*.pyc
+tunnel_url.txt
+.git
