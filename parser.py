@@ -30,8 +30,13 @@ PROMPT_OCR_PORTFOLIO = """
 """
 
 def _call_gemini(client, contents):
-    # Google AI Studio에서 지원되는 모델들을 순차적으로 시도
-    candidate_models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite']
+    # Google AI의 최신 지원 모델들을 순차적으로 시도
+    candidate_models = [
+        'gemini-3.8-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash'
+    ]
     last_err = None
     for m in candidate_models:
         try:
