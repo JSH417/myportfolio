@@ -788,45 +788,62 @@
       });
     }
 
+    let isAutoSyncing = false;
+
     async function loadSummary() {
       try {
         const res = await fetch('/api/summary');
         const data = await res.json();
         summaryData = data;
 
-        // 브라우저 로컬 저장소 자동 백업 및 복원 검사
         const restoreBanner = document.getElementById('restore-banner');
         if (data && data.assets && data.assets.length > 0) {
           localStorage.setItem('portfolio_assets_backup', JSON.stringify(data.assets));
           if (restoreBanner) restoreBanner.classList.add('hidden');
+          renderDashboard(data);
+          if (currentTab === 'rebalance') renderRebalanceTab();
+          if (currentTab === 'dividend') renderDividendTab();
         } else {
-          // 서버에 종목이 0개인데 로컬 백업이 존재하는 경우
+          // 서버에 종목이 0개인데 로컬 백업이 존재하는 경우 -> 백그라운드 자동 복원(Silent Auto-Sync)!
           const backupStr = localStorage.getItem('portfolio_assets_backup');
-          if (backupStr) {
+          if (backupStr && !isAutoSyncing) {
             try {
               const backupAssets = JSON.parse(backupStr);
-              if (backupAssets && backupAssets.length > 0 && restoreBanner) {
-                restoreBanner.classList.remove('hidden');
-                document.getElementById('restore-banner-text').innerText = `${backupAssets.length}개 종목이 브라우저에 안전 보관 중입니다.`;
-              }
-            } catch(e) {}
-          }
-        }
+              if (backupAssets && backupAssets.length > 0) {
+                // UI는 로컬 백업으로 즉시 먼저 띄워줌 (0원 안 보이게!)
+                data.assets = backupAssets;
+                renderDashboard(data);
+                if (currentTab === 'rebalance') renderRebalanceTab();
+                if (currentTab === 'dividend') renderDividendTab();
 
-        renderDashboard(data);
-        if (currentTab === 'rebalance') renderRebalanceTab();
-        if (currentTab === 'dividend') renderDividendTab();
+                // 백그라운드에서 서버로 조용히 동기화
+                isAutoSyncing = true;
+                await restoreFromBackup(true);
+                isAutoSyncing = false;
+                return;
+              }
+            } catch(e) {
+              isAutoSyncing = false;
+            }
+          }
+          renderDashboard(data);
+          if (currentTab === 'rebalance') renderRebalanceTab();
+          if (currentTab === 'dividend') renderDividendTab();
+        }
       } catch (err) {
         console.error("데이터 로드 실패:", err);
       }
     }
 
-    async function restoreFromBackup() {
+    async function restoreFromBackup(silent = false) {
       const backupStr = localStorage.getItem('portfolio_assets_backup');
-      if (!backupStr) return alert("복구할 브라우저 백업 데이터가 없습니다.");
+      if (!backupStr) {
+        if (!silent) alert("복구할 브라우저 백업 데이터가 없습니다.");
+        return;
+      }
       try {
         const backupAssets = JSON.parse(backupStr);
-        if (!confirm(`브라우저에 보관된 ${backupAssets.length}개 종목을 서버로 복구하시겠습니까?`)) return;
+        if (!silent && !confirm(`브라우저에 보관된 ${backupAssets.length}개 종목을 서버로 복구하시겠습니까?`)) return;
         
         for (const a of backupAssets) {
           await fetch('/api/asset', {
@@ -847,10 +864,17 @@
           });
         }
         document.getElementById('restore-banner')?.classList.add('hidden');
-        await loadSummary();
-        alert(`총 ${backupAssets.length}개 종목이 성공적으로 복구되었습니다!`);
+        if (!silent) alert(`총 ${backupAssets.length}개 종목이 성공적으로 복구되었습니다!`);
+        
+        // 서버에서 최신 상태로 재갱신
+        const res = await fetch('/api/summary');
+        const data = await res.json();
+        summaryData = data;
+        renderDashboard(data);
+        if (currentTab === 'rebalance') renderRebalanceTab();
+        if (currentTab === 'dividend') renderDividendTab();
       } catch (e) {
-        alert("복구 실패: " + e.message);
+        if (!silent) alert("복구 실패: " + e.message);
       }
     }
 
