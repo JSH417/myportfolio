@@ -662,23 +662,34 @@
 
     <!-- Modal: Edit Target Weights -->
     <div id="modal-target-weights" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-      <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm p-5 space-y-3.5 shadow-2xl">
         <div class="flex justify-between items-center">
-          <h3 class="font-bold text-sm text-white">목표 비중 (%) 일괄 설정</h3>
+          <div>
+            <h3 class="font-bold text-sm text-white">목표 비중 (%) 일괄 설정</h3>
+            <p id="tw-account-desc" class="text-[11px] text-slate-400 mt-0.5">선택한 계좌의 목표 비중을 설정합니다.</p>
+          </div>
           <button onclick="closeEditTargetWeightsModal()" class="text-slate-400 hover:text-white">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
-        <p class="text-[11px] text-slate-400">모든 종목의 목표 비중 합이 100%가 되도록 입력해주세요.</p>
+
+        <!-- 모달 내부 계좌 필터 칩 (계좌별로 분리해서 설정 가능!) -->
+        <div class="flex items-center space-x-1.5 overflow-x-auto py-1 scrollbar-none border-b border-slate-700/50 pb-2.5">
+          <button type="button" onclick="filterTargetWeightsModal('ALL')" id="tw-filter-ALL" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition">전체</button>
+          <button type="button" onclick="filterTargetWeightsModal('ISA')" id="tw-filter-ISA" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition">ISA</button>
+          <button type="button" onclick="filterTargetWeightsModal('CMA')" id="tw-filter-CMA" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition">CMA</button>
+          <button type="button" onclick="filterTargetWeightsModal('연금저축')" id="tw-filter-연금저축" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition">연금저축</button>
+          <button type="button" onclick="filterTargetWeightsModal('달러RP')" id="tw-filter-달러RP" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition">달러RP</button>
+        </div>
 
         <div id="target-weights-inputs" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
 
-        <div class="flex justify-between items-center text-xs font-semibold px-1">
-          <span class="text-slate-400">합계:</span>
-          <span id="target-weights-sum" class="text-emerald-400 font-mono">100%</span>
+        <div class="flex justify-between items-center text-xs font-semibold px-1 pt-1 border-t border-slate-700/60">
+          <span class="text-slate-400">목표 비중 합계:</span>
+          <span id="target-weights-sum" class="text-emerald-400 font-mono font-bold">100%</span>
         </div>
 
-        <button onclick="saveTargetWeights()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition">
+        <button id="btn-save-target-weights" onclick="saveTargetWeights()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition">
           저장하기
         </button>
       </div>
@@ -1396,36 +1407,78 @@
 
     // ================= REBALANCE & NEW CASH =================
     function renderRebalanceTab() {
-      if (!summaryData) return;
+      if (!summaryData || !summaryData.assets) return;
       const listEl = document.getElementById('rebalance-status-list');
-      const assets = summaryData.assets;
+      const filteredAssets = getFilteredAssets(summaryData.assets);
 
-      listEl.innerHTML = assets.map(a => {
-        const diffSign = a.diff_weight_pct > 0 ? '+' : '';
-        const rebalanceText = a.rebalance_amount_krw > 0
-          ? `<span class="text-amber-400 font-bold">+${Math.round(a.rebalance_amount_krw).toLocaleString()}원 매수 필요</span>`
-          : (a.rebalance_amount_krw < 0 ? `<span class="text-slate-400">${Math.round(Math.abs(a.rebalance_amount_krw)).toLocaleString()}원 초과</span>` : `<span class="text-emerald-400">목표 달성</span>`);
+      if (!filteredAssets || filteredAssets.length === 0) {
+        listEl.innerHTML = `<div class="text-center py-8 text-xs text-slate-500 bg-slate-800/20 rounded-xl">선택된 계좌에 자산이 없습니다.</div>`;
+        return;
+      }
+
+      // 선택된 계좌들의 총 평가금액 계산
+      const totalFilteredVal = filteredAssets.reduce((sum, a) => sum + (Number(a.eval_value_krw) || 0), 0);
+
+      listEl.innerHTML = filteredAssets.map(a => {
+        const valKrw = Number(a.eval_value_krw) || 0;
+        // 선택 계좌 내 실제 비중
+        const currentWeight = totalFilteredVal > 0 ? (valKrw / totalFilteredVal * 100) : 0;
+        const currentWeightFormatted = currentWeight.toFixed(1);
+        const targetWeight = Number(a.target_weight) || 0;
+        const diffWeight = (currentWeight - targetWeight).toFixed(1);
+        const diffSign = diffWeight > 0 ? '+' : '';
+
+        // 계좌 내 목표 비중에 따른 목표 금액 및 리밸런싱 필요금액
+        const idealVal = totalFilteredVal * (targetWeight / 100.0);
+        const rebalanceAmt = Math.round(idealVal - valKrw);
+
+        let statusText = '유지 (목표 부합)';
+        let statusColor = 'text-emerald-400';
+        if (Math.abs(diffWeight) <= 1.5) {
+          statusText = '유지 (목표 부합)';
+          statusColor = 'text-emerald-400';
+        } else if (diffWeight < -1.5) {
+          statusText = '부족 (추가 매수)';
+          statusColor = 'text-amber-400';
+        } else {
+          statusText = '초과 (비중 과다)';
+          statusColor = 'text-blue-400';
+        }
+
+        const rebalanceGuide = rebalanceAmt > 0
+          ? `<span class="text-amber-400 font-bold">+${rebalanceAmt.toLocaleString()}원 매수 필요</span>`
+          : (rebalanceAmt < 0 ? `<span class="text-slate-400">${Math.abs(rebalanceAmt).toLocaleString()}원 초과</span>` : `<span class="text-emerald-400">목표 달성</span>`);
+
+        const acc = a.account || 'ISA';
+        let accBg = 'bg-slate-700 text-slate-300';
+        if (acc === 'ISA') accBg = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        else if (acc === 'CMA') accBg = 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
+        else if (acc === '연금저축') accBg = 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
+        else if (acc === '달러RP') accBg = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
 
         return `
           <div class="bg-slate-800/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
             <div class="flex justify-between items-center">
-              <span class="font-bold text-sm text-white">${a.name}</span>
-              <span class="text-xs font-semibold ${a.status_color}">${a.status}</span>
+              <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                <span class="font-bold text-sm text-white">${a.name}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${accBg}">${acc}</span>
+              </div>
+              <span class="text-xs font-semibold ${statusColor}">${statusText}</span>
             </div>
 
             <div class="space-y-1">
               <div class="flex justify-between text-[11px] text-slate-400">
-                <span>현재 ${a.weight_pct}% vs 목표 ${a.target_weight}%</span>
-                <span>(격차: ${diffSign}${a.diff_weight_pct}%)</span>
+                <span>현재 ${currentWeightFormatted}% vs 목표 ${targetWeight}%</span>
+                <span>(격차: ${diffSign}${diffWeight}%)</span>
               </div>
               <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden flex">
-                <div class="bg-emerald-500 h-full" style="width: ${Math.min(a.weight_pct, 100)}%"></div>
+                <div class="bg-emerald-500 h-full" style="width: ${Math.min(currentWeight, 100)}%"></div>
               </div>
             </div>
 
             <div class="pt-1 border-t border-slate-700/50 flex justify-between items-center text-xs">
               <span class="text-slate-400">조정 가이드:</span>
-              <div>${rebalanceText}</div>
+              <div>${rebalanceGuide}</div>
             </div>
           </div>
         `;
@@ -1439,22 +1492,27 @@
         return;
       }
 
-      const totalVal = summaryData.total_value_krw;
-      const newTotal = totalVal + cash;
+      const filteredAssets = getFilteredAssets(summaryData.assets);
+      const totalFilteredVal = filteredAssets.reduce((sum, a) => sum + (Number(a.eval_value_krw) || 0), 0);
+      const newTotal = totalFilteredVal + cash;
       const resultContainer = document.getElementById('new-cash-result');
       resultContainer.classList.remove('hidden');
 
       let allocations = [];
       let totalDeficit = 0;
 
-      summaryData.assets.forEach(a => {
-        const idealVal = newTotal * (a.target_weight / 100.0);
-        const currentVal = a.eval_value_krw;
+      filteredAssets.forEach(a => {
+        const targetW = Number(a.target_weight) || 0;
+        const idealVal = newTotal * (targetW / 100.0);
+        const currentVal = Number(a.eval_value_krw) || 0;
         const deficit = Math.max(0, idealVal - currentVal);
         totalDeficit += deficit;
         allocations.push({
+          id: a.id,
           name: a.name,
           symbol: a.symbol,
+          account: a.account || 'ISA',
+          target_weight: targetW,
           deficit: deficit,
           currency: a.currency,
           asset_type: a.asset_type
@@ -1468,27 +1526,26 @@
         if (totalDeficit > 0) {
           allocatedAmt = Math.round((item.deficit / totalDeficit) * cash);
         } else {
-          const assetObj = summaryData.assets.find(x => x.symbol === item.symbol);
-          allocatedAmt = Math.round(cash * (assetObj.target_weight / 100.0));
+          allocatedAmt = Math.round(cash * (item.target_weight / 100.0));
         }
 
         if (allocatedAmt > 0) {
           let extraInfo = '';
           if (item.currency === 'USD') {
-            const usdEq = (allocatedAmt / summaryData.rate).toFixed(1);
+            const usdEq = (allocatedAmt / (summaryData.rate || 1400)).toFixed(1);
             extraInfo = `(약 $${usdEq})`;
           }
 
           html += `
             <div class="flex justify-between items-center bg-slate-900 p-2 rounded-lg text-xs">
-              <span class="text-slate-200 font-medium">${item.name}</span>
-              <span class="font-bold text-indigo-400 font-mono">${allocatedAmt.toLocaleString()}원 ${extraInfo}</span>
+              <span class="text-slate-200 font-medium">${item.name} <span class="text-[10px] text-slate-500 font-mono">[${item.account}]</span></span>
+              <span class="font-bold text-indigo-400 font-mono">+${allocatedAmt.toLocaleString()}원 ${extraInfo}</span>
             </div>
           `;
         }
       });
 
-      resultContainer.innerHTML = html;
+      document.getElementById('new-cash-allocations-list').innerHTML = html;
     }
 
     // ================= DIVIDEND & COMPOUNDING =================
@@ -1625,19 +1682,85 @@
     }
 
     // Modal: Target Weights Edit
+    let modalSelectedAccount = 'ALL';
+
     function openEditTargetWeightsModal() {
-      const container = document.getElementById('target-weights-inputs');
-      container.innerHTML = summaryData.assets.map(a => `
-        <div class="flex justify-between items-center text-xs">
-          <span class="text-slate-300 font-medium">${a.name}</span>
-          <div class="flex items-center space-x-1">
-            <input type="number" step="any" value="${a.target_weight}" data-symbol="${a.symbol}" oninput="calcTargetWeightsSum()" class="tw-input w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right text-white">
-            <span class="text-slate-400">%</span>
-          </div>
-        </div>
-      `).join('');
-      calcTargetWeightsSum();
+      // 메인 화면에서 단일 계좌를 보고 있었다면 그 계좌를 기본 선택, 아니면 ALL
+      if (selectedAccounts.length === 1 && selectedAccounts[0] !== 'ALL') {
+        modalSelectedAccount = selectedAccounts[0];
+      } else {
+        modalSelectedAccount = 'ALL';
+      }
+      renderTargetWeightsModal();
       document.getElementById('modal-target-weights').classList.remove('hidden');
+    }
+
+    function filterTargetWeightsModal(acc) {
+      modalSelectedAccount = acc;
+      renderTargetWeightsModal();
+    }
+
+    function renderTargetWeightsModal() {
+      const container = document.getElementById('target-weights-inputs');
+      if (!summaryData || !summaryData.assets) return;
+
+      // 필터 버튼 UI 스타일 갱신
+      ['ALL', 'ISA', 'CMA', '연금저축', '달러RP'].forEach(acc => {
+        const btn = document.getElementById(`tw-filter-${acc}`);
+        if (!btn) return;
+        if (acc === modalSelectedAccount) {
+          btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500 text-slate-950 shadow transition';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-700/60 text-slate-300 hover:text-white transition';
+        }
+      });
+
+      const descEl = document.getElementById('tw-account-desc');
+      if (descEl) {
+        descEl.innerText = modalSelectedAccount === 'ALL' 
+          ? '전체 계좌 통합 목표 비중 설정' 
+          : `[${modalSelectedAccount}] 계좌 목표 비중 설정`;
+      }
+
+      let assetsToDisplay = summaryData.assets;
+      if (modalSelectedAccount !== 'ALL') {
+        assetsToDisplay = summaryData.assets.filter(a => (a.account || 'ISA') === modalSelectedAccount);
+      }
+
+      if (assetsToDisplay.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-xs text-slate-500">해당 계좌에 등록된 자산이 없습니다.</div>`;
+        calcTargetWeightsSum();
+        return;
+      }
+
+      container.innerHTML = assetsToDisplay.map(a => {
+        const acc = a.account || 'ISA';
+        let accBg = 'bg-slate-700 text-slate-300';
+        if (acc === 'ISA') accBg = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        else if (acc === 'CMA') accBg = 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
+        else if (acc === '연금저축') accBg = 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
+        else if (acc === '달러RP') accBg = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
+
+        return `
+          <div class="flex justify-between items-center text-xs bg-slate-900/40 p-2 rounded-lg border border-slate-700/40">
+            <div class="flex items-center space-x-1.5 truncate pr-2">
+              <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${accBg}">${acc}</span>
+              <span class="text-slate-200 font-medium truncate">${a.name}</span>
+            </div>
+            <div class="flex items-center space-x-1 shrink-0">
+              <input type="number" step="any" value="${a.target_weight || 0}" 
+                data-id="${a.id || 0}" 
+                data-symbol="${a.symbol}" 
+                data-account="${a.account || 'ISA'}"
+                oninput="calcTargetWeightsSum()" 
+                class="tw-input w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right text-emerald-400 font-bold focus:border-emerald-500 focus:outline-none">
+              <span class="text-slate-400 font-semibold">%</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      calcTargetWeightsSum();
     }
 
     function closeEditTargetWeightsModal() {
@@ -1650,27 +1773,58 @@
         sum += parseFloat(inp.value) || 0;
       });
       const sumEl = document.getElementById('target-weights-sum');
-      sumEl.innerText = `${sum.toFixed(1)}%`;
-      sumEl.className = Math.abs(sum - 100) < 0.1 ? 'text-emerald-400 font-mono' : 'text-rose-400 font-mono';
+      if (sumEl) {
+        sumEl.innerText = `${sum.toFixed(1)}%`;
+        sumEl.className = Math.abs(sum - 100) < 0.1 ? 'text-emerald-400 font-mono font-bold' : 'text-amber-400 font-mono font-bold';
+      }
     }
 
     async function saveTargetWeights() {
+      const saveBtn = document.getElementById('btn-save-target-weights');
+      if (saveBtn) saveBtn.innerText = '저장 중...';
+
       const payload = [];
       document.querySelectorAll('.tw-input').forEach(inp => {
+        const id = parseInt(inp.getAttribute('data-id')) || 0;
+        const sym = inp.getAttribute('data-symbol');
+        const acc = inp.getAttribute('data-account');
+        const tw = parseFloat(inp.value) || 0;
         payload.push({
-          symbol: inp.getAttribute('data-symbol'),
-          target_weight: parseFloat(inp.value) || 0
+          id: id,
+          symbol: sym,
+          account: acc,
+          target_weight: tw
         });
+
+        // 1. summaryData 메모리 즉시 동기화 (지연 없이 즉각 반영!)
+        if (summaryData && summaryData.assets) {
+          const target = summaryData.assets.find(x => (id > 0 && x.id === id) || (x.symbol === sym && (x.account || 'ISA') === acc));
+          if (target) {
+            target.target_weight = tw;
+          }
+        }
       });
 
-      await fetch('/api/target-weights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      // 2. 브라우저 로컬 스토리지 백업도 즉시 갱신
+      if (summaryData && summaryData.assets) {
+        localStorage.setItem('portfolio_assets_backup', JSON.stringify(summaryData.assets));
+      }
 
-      closeEditTargetWeightsModal();
-      loadSummary();
+      try {
+        await fetch('/api/target-weights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        closeEditTargetWeightsModal();
+        renderRebalanceTab();
+        await loadSummary();
+      } catch (err) {
+        alert("목표 비중 저장 실패: " + err.message);
+      } finally {
+        if (saveBtn) saveBtn.innerText = '저장하기';
+      }
     }
 
     // ETF Candlestick

@@ -237,12 +237,19 @@ def update_target_weights(targets: list):
     conn = get_connection()
     c = conn.cursor()
     for t in targets:
-        if t.get("id"):
-            c.execute("UPDATE assets SET target_weight = ? WHERE id = ?", (t["target_weight"], t["id"]))
+        tw = float(t.get("target_weight", 0))
+        target_id = t.get("id")
+        try:
+            tid = int(target_id) if target_id else 0
+        except (ValueError, TypeError):
+            tid = 0
+
+        if tid > 0:
+            c.execute("UPDATE assets SET target_weight = ? WHERE id = ?", (tw, tid))
         elif t.get("account"):
-            c.execute("UPDATE assets SET target_weight = ? WHERE symbol = ? AND account = ?", (t["target_weight"], t["symbol"], t["account"]))
+            c.execute("UPDATE assets SET target_weight = ? WHERE symbol = ? AND account = ?", (tw, t["symbol"], t["account"]))
         else:
-            c.execute("UPDATE assets SET target_weight = ? WHERE symbol = ?", (t["target_weight"], t["symbol"]))
+            c.execute("UPDATE assets SET target_weight = ? WHERE symbol = ?", (tw, t["symbol"]))
     conn.commit()
     conn.close()
     return {"status": "success"}
