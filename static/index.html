@@ -1130,13 +1130,23 @@
 
         let rightSideHtml = '';
         if (isCashType) {
+          let earnBadge = '';
+          if (a.dividend_yield > 0) {
+            if (isUSD) {
+              const daily = ((a.eval_value * (a.dividend_yield / 100)) / 365).toFixed(4);
+              earnBadge = `+$${daily}/일`;
+            } else {
+              const daily = Math.round((a.eval_value * (a.dividend_yield / 100)) / 365);
+              earnBadge = `+₩${daily.toLocaleString()}/일`;
+            }
+          }
           rightSideHtml = `
             <div class="font-bold text-xs text-slate-200">
               <span class="privacy-target">${currSym}${a.eval_value.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span>
               <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
             </div>
-            <div class="text-[11px] text-blue-400 font-medium">
-              ${a.dividend_yield > 0 ? `일할 이자 적립 중` : `현금 자산`}
+            <div class="text-[11px] text-blue-400 font-medium font-mono">
+              ${earnBadge ? `${earnBadge} (연 ${a.dividend_yield}%)` : `현금 자산`}
             </div>
           `;
         } else {
@@ -1791,9 +1801,9 @@
           document.getElementById('form-dividend-yield').value = 0.0;
         } else if (type === 'CASH_KRW') {
           symInput.value = 'CASH_KRW';
-          nameInput.value = 'CMA / 원화 예수금';
+          nameInput.value = '발행어음 CMA';
           labelCash.innerText = '보유 원화 잔액 (원)';
-          document.getElementById('form-dividend-yield').value = 3.0;
+          document.getElementById('form-dividend-yield').value = 3.15;
           document.getElementById('form-account').value = 'CMA';
         }
       } else {

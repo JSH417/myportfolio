@@ -134,7 +134,7 @@ def get_portfolio_summary():
         annual_div_asset_krw = val_krw * (dy / 100.0)
         annual_div_krw_total += annual_div_asset_krw
 
-        if freq == "MONTHLY":
+        if asset_type in ["CASH_KRW", "USD_RP"] or freq == "MONTHLY":
             m_amt = annual_div_asset_krw / 12.0
             for m in range(12): monthly_div_chart[m] += m_amt
         elif freq == "QUARTERLY":
