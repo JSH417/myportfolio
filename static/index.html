@@ -154,6 +154,34 @@
           </div>
         </div>
 
+        <!-- 발행어음 CMA 일복리 전용 카드 (CMA 보유 시 자동 표시) -->
+        <div id="cma-dedicated-card" class="hidden bg-gradient-to-r from-amber-950/40 via-slate-800 to-emerald-950/30 p-4 rounded-xl border border-amber-500/30 space-y-2">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center space-x-1.5 text-amber-400 font-bold text-xs">
+              <i class="fa-solid fa-file-invoice-dollar"></i>
+              <span id="cma-card-name">발행어음 CMA</span>
+            </div>
+            <!-- 약정 이율 원클릭 변경 버튼 -->
+            <button onclick="openEditCmaRateModal()" class="text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-2 py-0.5 rounded-full font-semibold border border-amber-500/40 transition flex items-center space-x-1">
+              <span>약정 연 <span id="cma-rate-badge">2.60</span>% (일복리)</span>
+              <i class="fa-solid fa-pen text-[8px]"></i>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+            <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+              <span class="text-slate-400 text-[10px]">보유 원화 잔액</span>
+              <div class="font-bold text-sm text-amber-400 mt-0.5 privacy-target" id="cma-card-balance">0원</div>
+              <div class="text-[10px] text-slate-500">수시입출금 파킹</div>
+            </div>
+            <div class="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+              <span class="text-slate-400 text-[10px]">매일 붙는 일복리 이자</span>
+              <div class="font-bold text-sm text-emerald-400 mt-0.5 privacy-target" id="cma-daily-earn">+₩0 /일</div>
+              <div class="text-[10px] text-slate-400 privacy-target" id="cma-compound-earn">(월 약 +0원 • 1년 일복리 +0원)</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Currency Breakdown -->
         <div class="grid grid-cols-2 gap-2 text-xs">
           <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-800">
@@ -299,7 +327,7 @@
           </div>
 
           <div class="mt-2 text-[11px] text-slate-400">
-            보유 ETF 분배금 + 외화 RP(연 3.35%) 일할 약정 이자가 모두 포함된 수치입니다.
+            보유 ETF 분배금 + 외화 RP(연 3.35%) + 발행어음 CMA(연 2.6%) 약정 이자가 모두 포함된 수치입니다.
           </div>
         </div>
 
@@ -309,6 +337,36 @@
             <span class="text-[10px] text-slate-500">1월 ~ 12월 캘린더</span>
           </div>
           <div id="dividend-monthly-chart" class="min-h-[220px]"></div>
+        </div>
+
+        <!-- 발행어음 CMA 일복리 정밀 계산기 섹션 -->
+        <div class="bg-gradient-to-r from-amber-950/30 via-slate-800/60 to-slate-900 p-4 rounded-xl border border-amber-500/30 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-1.5 text-amber-400 font-bold text-xs">
+              <i class="fa-solid fa-calculator"></i>
+              <span id="cma-calc-title">발행어음 CMA (연 2.6%) 일복리 계산표</span>
+            </div>
+            <span class="text-[10px] text-slate-400">일복리 재투자 기준</span>
+          </div>
+
+          <p class="text-[11px] text-slate-300">
+            매일 하루도 빠짐없이 발생한 당일 이자가 다음 날 원금에 가산되어 불어나는 <b>발행어음 일복리(Daily Compound)</b> 수익표입니다.
+          </p>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left">
+              <thead>
+                <tr class="text-slate-400 border-b border-slate-700/60 text-[10px]">
+                  <th class="py-1.5">거치 기간</th>
+                  <th class="py-1.5 text-right">예상 누적 이자</th>
+                  <th class="py-1.5 text-right">최종 수령액</th>
+                  <th class="py-1.5 text-right">실효 수익률</th>
+                </tr>
+              </thead>
+              <tbody id="cma-compound-table-body" class="divide-y divide-slate-800/80 font-mono text-[11px]">
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div class="bg-slate-800/50 p-4 rounded-xl border border-slate-800 space-y-3">
@@ -473,6 +531,31 @@
         </div>
 
         <button onclick="saveRpRate()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition">
+          저장하기
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal: 발행어음 CMA 약정 이율 원클릭 수정 -->
+    <div id="modal-cma-rate" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-xs p-5 space-y-4 shadow-2xl">
+        <div class="flex justify-between items-center">
+          <h3 class="font-bold text-sm text-white">발행어음 CMA 약정 이율</h3>
+          <button onclick="closeEditCmaRateModal()" class="text-slate-400 hover:text-white">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-400">증권사에서 고시하는 현재 발행어음 CMA 연 이율(%)을 입력하세요. (매일 일복리 계산)</p>
+
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">약정 이율 (연 %)</label>
+          <div class="flex items-center space-x-2">
+            <input type="number" step="0.01" id="input-cma-rate" placeholder="2.60" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono text-center font-bold">
+            <span class="text-sm text-slate-300 font-bold">%</span>
+          </div>
+        </div>
+
+        <button onclick="saveCmaRate()" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 rounded-xl text-xs transition">
           저장하기
         </button>
       </div>
@@ -946,6 +1029,28 @@
         rpCardContainer.classList.add('hidden');
       }
 
+      // CMA 발행어음 전용 일복리 카드 동적 바인딩
+      const cmaCardContainer = document.getElementById('cma-dedicated-card');
+      const cmaAsset = filteredAssets.find(a => (a.symbol === 'CASH_KRW' || a.asset_type === 'CASH_KRW') && a.quantity > 0);
+      if (cmaAsset) {
+        cmaCardContainer.classList.remove('hidden');
+        const cmaRate = cmaAsset.dividend_yield || 2.60;
+        document.getElementById('cma-card-name').innerText = cmaAsset.name || '발행어음 CMA';
+        document.getElementById('cma-rate-badge').innerText = cmaRate.toFixed(2);
+        document.getElementById('cma-card-balance').innerText = `${Math.round(cmaAsset.quantity).toLocaleString()}원`;
+
+        const p = cmaAsset.quantity;
+        const r = cmaRate / 100.0;
+        const daily = Math.round(p * (r / 365.0));
+        const monthly = Math.round(p * (Math.pow(1 + r / 365.0, 30) - 1));
+        const yearly = Math.round(p * (Math.pow(1 + r / 365.0, 365) - 1));
+
+        document.getElementById('cma-daily-earn').innerText = `+₩${daily.toLocaleString()} /일`;
+        document.getElementById('cma-compound-earn').innerText = `(월 약 +${monthly.toLocaleString()}원 • 1년 일복리 +${yearly.toLocaleString()}원)`;
+      } else {
+        cmaCardContainer.classList.add('hidden');
+      }
+
       renderAllocationChart(filteredAssets);
       renderAssetsList(filteredAssets, rate);
     }
@@ -1036,6 +1141,30 @@
         body: JSON.stringify({ rate: rate })
       });
       closeEditRpRateModal();
+      loadSummary();
+    }
+
+    // 발행어음 CMA 약정 이율 원클릭 모달 열기/저장
+    function openEditCmaRateModal() {
+      const currentRate = document.getElementById('cma-rate-badge')?.innerText || '2.60';
+      document.getElementById('input-cma-rate').value = currentRate;
+      document.getElementById('modal-cma-rate').classList.remove('hidden');
+    }
+    function closeEditCmaRateModal() {
+      document.getElementById('modal-cma-rate').classList.add('hidden');
+    }
+    async function saveCmaRate() {
+      const rate = parseFloat(document.getElementById('input-cma-rate').value);
+      if (isNaN(rate) || rate < 0) {
+        alert("올바른 이율을 입력해주세요.");
+        return;
+      }
+      await fetch('/api/cma-interest-rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rate: rate })
+      });
+      closeEditCmaRateModal();
       loadSummary();
     }
 
@@ -1301,6 +1430,44 @@
 
       renderMonthlyDividendChart(summaryData.monthly_div_chart);
       renderCompoundSimulation(summaryData.total_value_krw, parseFloat(divYield));
+      renderCmaCompoundTable(summaryData.assets);
+    }
+
+    function renderCmaCompoundTable(assets) {
+      const cmaAsset = (assets || []).find(a => a.symbol === 'CASH_KRW' || a.asset_type === 'CASH_KRW');
+      const p = (cmaAsset && cmaAsset.quantity > 0) ? cmaAsset.quantity : 10000000;
+      const rate = ((cmaAsset ? cmaAsset.dividend_yield : 2.6) || 2.6);
+      const r = rate / 100.0;
+
+      const titleEl = document.getElementById('cma-calc-title');
+      if (titleEl) {
+        titleEl.innerText = `발행어음 CMA (${Math.round(p).toLocaleString()}원, 연 ${rate}%) 일복리 계산표`;
+      }
+
+      const periods = [
+        { label: '30일 (1개월)', days: 30 },
+        { label: '90일 (3개월)', days: 90 },
+        { label: '180일 (6개월)', days: 180 },
+        { label: '365일 (1년 만기)', days: 365 },
+        { label: '3년 (1,095일)', days: 1095 }
+      ];
+
+      const rowsHtml = periods.map(item => {
+        const factor = Math.pow(1 + r / 365.0, item.days);
+        const total = Math.round(p * factor);
+        const interest = total - p;
+        const effPct = ((factor - 1) * (365 / item.days) * 100).toFixed(3);
+        return `
+          <tr>
+            <td class="py-2.5 text-slate-300 font-sans">${item.label}</td>
+            <td class="py-2.5 text-right text-emerald-400 font-bold">+₩${interest.toLocaleString()}</td>
+            <td class="py-2.5 text-right text-slate-200">₩${total.toLocaleString()}</td>
+            <td class="py-2.5 text-right text-amber-400">${effPct}%</td>
+          </tr>
+        `;
+      }).join('');
+      const tbody = document.getElementById('cma-compound-table-body');
+      if (tbody) tbody.innerHTML = rowsHtml;
     }
 
     function renderMonthlyDividendChart(monthlyData) {

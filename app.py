@@ -222,6 +222,17 @@ def update_rp_rate(data: dict):
     conn.close()
     return {"status": "success", "new_rate": rate}
 
+@app.post("/api/cma-interest-rate")
+def update_cma_rate(data: dict):
+    """발행어음 CMA 약정 이율 원클릭 변경"""
+    rate = float(data.get("rate", 2.60))
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE assets SET dividend_yield = ? WHERE symbol = 'CASH_KRW' OR asset_type = 'CASH_KRW'", (rate,))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "new_rate": rate}
+
 @app.post("/api/target-weights")
 def update_target_weights(targets: list):
     conn = get_connection()
