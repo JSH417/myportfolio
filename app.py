@@ -227,7 +227,7 @@ def update_cma_rate(data: dict):
     rate = float(data.get("rate", 2.60))
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE assets SET dividend_yield = ? WHERE symbol = 'CASH_KRW' OR asset_type = 'CASH_KRW'", (rate,))
+    c.execute("UPDATE assets SET dividend_yield = ? WHERE account = 'CMA' AND (symbol = 'CASH_KRW' OR asset_type = 'CASH_KRW')", (rate,))
     conn.commit()
     conn.close()
     return {"status": "success", "new_rate": rate}
