@@ -989,7 +989,7 @@
 
     function renderDashboard(data) {
       const filteredAssets = getFilteredAssets(data.assets);
-      const rate = data.rate;
+      const rate = Number(data.rate) || 1400.0;
 
       // 선택된 계좌들의 자산만 재합산
       let total_val_krw = 0.0;
@@ -999,17 +999,38 @@
       let usd_rp_val_usd = 0.0;
 
       filteredAssets.forEach(a => {
-        const valKrw = a.eval_value_krw;
-        const invKrw = (a.currency === 'KRW') ? a.invested_value : a.invested_value * rate;
+        const isCash = (a.asset_type === 'USD_RP' || (a.asset_type && a.asset_type.startsWith('CASH')));
+        const curPrice = Number(a.current_price) || Number(a.avg_price) || (isCash ? 1.0 : 0.0);
+        const avgPrice = Number(a.avg_price) || curPrice;
+        const qty = Number(a.quantity) || 0;
+
+        if (a.eval_value == null) {
+          a.eval_value = isCash ? qty : qty * curPrice;
+        }
+        if (a.invested_value == null) {
+          a.invested_value = isCash ? qty : qty * avgPrice;
+        }
+        if (a.eval_value_krw == null) {
+          a.eval_value_krw = a.currency === 'USD' ? Math.round(a.eval_value * rate) : Math.round(a.eval_value);
+        }
+        if (a.pnl == null) {
+          a.pnl = isCash ? 0 : (a.eval_value - a.invested_value);
+        }
+        if (a.pnl_pct == null) {
+          a.pnl_pct = (a.invested_value > 0) ? (a.pnl / a.invested_value * 100) : 0;
+        }
+
+        const valKrw = Number(a.eval_value_krw) || 0;
+        const invKrw = (a.currency === 'KRW') ? (Number(a.invested_value) || 0) : ((Number(a.invested_value) || 0) * rate);
         total_val_krw += valKrw;
         total_invested_krw += invKrw;
 
         if (a.currency === 'KRW') {
           krw_assets_val += valKrw;
         } else {
-          usd_assets_usd += a.eval_value;
+          usd_assets_usd += (Number(a.eval_value) || 0);
           if (a.asset_type === 'USD_RP') {
-            usd_rp_val_usd += a.eval_value;
+            usd_rp_val_usd += (Number(a.eval_value) || 0);
           }
         }
       });
@@ -1020,7 +1041,7 @@
 
       // 각 자산의 선택 계좌 내 비중 재계산
       filteredAssets.forEach(a => {
-        a.filtered_weight_pct = total_val_krw > 0 ? ((a.eval_value_krw / total_val_krw) * 100).toFixed(1) : 0.0;
+        a.filtered_weight_pct = total_val_krw > 0 ? ((Number(a.eval_value_krw || 0) / total_val_krw) * 100).toFixed(1) : '0.0';
       });
 
       document.getElementById('current-rate').innerText = `1$ = ${rate.toLocaleString()}원`;
@@ -1223,126 +1244,150 @@
       donutChart.render();
     }
 
+    let currentDisplayedAssets = [];
+
+    function openEditAssetByIndex(index) {
+      if (currentDisplayedAssets && currentDisplayedAssets[index]) {
+        openEditAssetModal(currentDisplayedAssets[index]);
+      }
+    }
+
     function renderAssetsList(assets, rate) {
+      currentDisplayedAssets = assets || [];
       const listEl = document.getElementById('assets-list');
+      if (!listEl) return;
       if (!assets || assets.length === 0) {
         listEl.innerHTML = `<div class="text-center py-8 text-xs text-slate-500 bg-slate-800/20 rounded-xl">자산이 없습니다.</div>`;
         return;
       }
 
-      listEl.innerHTML = assets.map(a => {
-        const isUSD = a.currency === 'USD';
-        const isCashType = a.asset_type === 'USD_RP' || a.asset_type.startsWith('CASH');
-        const pnlValSign = a.pnl > 0 ? '+' : (a.pnl < 0 ? '-' : '');
-        const pnlPctSign = a.pnl_pct > 0 ? '+' : '';
-        const pnlColor = a.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400';
-        
-        let badgeBg = 'bg-slate-700 text-slate-300';
-        let badgeText = a.asset_type;
-        if (a.asset_type === 'USD_RP') {
-          badgeBg = 'bg-blue-500/20 text-blue-400';
-          badgeText = '외화 RP';
-        } else if (a.asset_type === 'CASH_USD') {
-          badgeBg = 'bg-cyan-500/20 text-cyan-400';
-          badgeText = '달러 예수금';
-        } else if (a.asset_type === 'CASH_KRW') {
-          badgeBg = 'bg-slate-600 text-slate-200';
-          badgeText = 'CMA / 원화현금';
-        } else if (a.asset_type === 'KR_ETF') {
-          badgeBg = 'bg-emerald-500/20 text-emerald-400';
-          badgeText = '국내 ETF';
-        } else if (a.asset_type === 'US_ETF') {
-          badgeBg = 'bg-indigo-500/20 text-indigo-400';
-          badgeText = '미국 ETF';
-        }
+      try {
+        listEl.innerHTML = assets.map((a, index) => {
+          const isUSD = a.currency === 'USD';
+          const currSym = isUSD ? '$' : '₩';
+          const isCashType = a.asset_type === 'USD_RP' || (a.asset_type && a.asset_type.startsWith('CASH'));
 
-        let subInfoHtml = '';
-        if (isCashType) {
-          let noteParts = [];
-          if (isUSD) noteParts.push(`약 ₩${Math.round(a.eval_value_krw).toLocaleString()}`);
-          if (a.dividend_yield > 0) noteParts.push(`약정금리 연 ${a.dividend_yield}%`);
-          const extraNote = noteParts.length > 0 ? ` (${noteParts.join(' • ')})` : '';
-          subInfoHtml = `<span class="text-slate-300 font-medium font-mono privacy-target">${currSym}${a.eval_value.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span> <span class="text-slate-500 text-[10px]">${extraNote}</span>`;
-        } else {
-          subInfoHtml = `
-            <span>${a.quantity.toLocaleString()}주</span>
-            <span>•</span>
-            <span>평단 ${currSym}${a.avg_price.toLocaleString()}</span>
-            <span>•</span>
-            <span>현재 ${currSym}${a.current_price.toLocaleString()}</span>
-          `;
-        }
+          const evalVal = Number(a.eval_value != null ? a.eval_value : 0);
+          const evalValKrw = Number(a.eval_value_krw != null ? a.eval_value_krw : (isUSD ? Math.round(evalVal * (rate || 1400)) : evalVal));
+          const pnlVal = Number(a.pnl != null ? a.pnl : 0);
+          const pnlPct = Number(a.pnl_pct != null ? a.pnl_pct : 0);
+          const pnlValSign = pnlVal > 0 ? '+' : (pnlVal < 0 ? '-' : '');
+          const pnlPctSign = pnlPct > 0 ? '+' : '';
+          const pnlColor = pnlVal >= 0 ? 'text-emerald-400' : 'text-rose-400';
+          const qty = Number(a.quantity != null ? a.quantity : 0);
+          const avgP = Number(a.avg_price != null ? a.avg_price : 0);
+          const curP = Number(a.current_price != null ? a.current_price : avgP);
 
-        // 계좌 뱃지 스타일
-        const acc = a.account || 'ISA';
-        let accBg = 'bg-slate-700 text-slate-300';
-        if (acc === 'ISA') accBg = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-        else if (acc === 'CMA') accBg = 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
-        else if (acc === '연금저축') accBg = 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
-        else if (acc === '달러RP') accBg = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
-
-        const displayWeight = a.filtered_weight_pct || a.weight_pct;
-
-        let rightSideHtml = '';
-        if (isCashType) {
-          let earnBadge = '';
-          if (a.dividend_yield > 0) {
-            if (isUSD) {
-              const daily = ((a.eval_value * (a.dividend_yield / 100)) / 365).toFixed(4);
-              earnBadge = `+$${daily}/일`;
-            } else {
-              const daily = Math.round((a.eval_value * (a.dividend_yield / 100)) / 365);
-              earnBadge = `+₩${daily.toLocaleString()}/일`;
-            }
+          let badgeBg = 'bg-slate-700 text-slate-300';
+          let badgeText = a.asset_type || '기타';
+          if (a.asset_type === 'USD_RP') {
+            badgeBg = 'bg-blue-500/20 text-blue-400';
+            badgeText = '외화 RP';
+          } else if (a.asset_type === 'CASH_USD') {
+            badgeBg = 'bg-cyan-500/20 text-cyan-400';
+            badgeText = '달러 예수금';
+          } else if (a.asset_type === 'CASH_KRW') {
+            badgeBg = 'bg-slate-600 text-slate-200';
+            badgeText = 'CMA / 원화현금';
+          } else if (a.asset_type === 'KR_ETF') {
+            badgeBg = 'bg-emerald-500/20 text-emerald-400';
+            badgeText = '국내 ETF';
+          } else if (a.asset_type === 'US_ETF') {
+            badgeBg = 'bg-indigo-500/20 text-indigo-400';
+            badgeText = '미국 ETF';
           }
-          rightSideHtml = `
-            <div class="font-bold text-xs text-slate-200">
-              <span class="privacy-target">${currSym}${a.eval_value.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span>
-              <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
-            </div>
-            <div class="text-[11px] text-blue-400 font-medium font-mono">
-              ${earnBadge ? `${earnBadge} (연 ${a.dividend_yield}%)` : `현금 자산`}
+
+          let subInfoHtml = '';
+          if (isCashType) {
+            let noteParts = [];
+            if (isUSD) noteParts.push(`약 ₩${Math.round(evalValKrw).toLocaleString()}`);
+            if (a.dividend_yield > 0) noteParts.push(`약정금리 연 ${a.dividend_yield}%`);
+            const extraNote = noteParts.length > 0 ? ` (${noteParts.join(' • ')})` : '';
+            subInfoHtml = `<span class="text-slate-300 font-medium font-mono privacy-target">${currSym}${evalVal.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span> <span class="text-slate-500 text-[10px]">${extraNote}</span>`;
+          } else {
+            subInfoHtml = `
+              <span>${qty.toLocaleString()}주</span>
+              <span>•</span>
+              <span>평단 ${currSym}${avgP.toLocaleString()}</span>
+              <span>•</span>
+              <span>현재 ${currSym}${curP.toLocaleString()}</span>
+            `;
+          }
+
+          // 계좌 뱃지 스타일
+          const acc = a.account || 'ISA';
+          let accBg = 'bg-slate-700 text-slate-300';
+          if (acc === 'ISA') accBg = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+          else if (acc === 'CMA') accBg = 'bg-amber-500/20 text-amber-400 border border-amber-500/30';
+          else if (acc === '연금저축') accBg = 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
+          else if (acc === '달러RP') accBg = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
+
+          const displayWeight = a.filtered_weight_pct || a.weight_pct || 0;
+
+          let rightSideHtml = '';
+          if (isCashType) {
+            let earnBadge = '';
+            if (a.dividend_yield > 0) {
+              if (isUSD) {
+                const daily = ((evalVal * (a.dividend_yield / 100)) / 365).toFixed(4);
+                earnBadge = `+$${daily}/일`;
+              } else {
+                const daily = Math.round((evalVal * (a.dividend_yield / 100)) / 365);
+                earnBadge = `+₩${daily.toLocaleString()}/일`;
+              }
+            }
+            rightSideHtml = `
+              <div class="font-bold text-xs text-slate-200">
+                <span class="privacy-target">${currSym}${evalVal.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span>
+                <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
+              </div>
+              <div class="text-[11px] text-blue-400 font-medium font-mono">
+                ${earnBadge ? `${earnBadge} (연 ${a.dividend_yield}%)` : `현금 자산`}
+              </div>
+            `;
+          } else {
+            rightSideHtml = `
+              <div class="font-bold text-xs text-slate-200">
+                <span class="privacy-target">${currSym}${evalVal.toLocaleString()}</span>
+                <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
+              </div>
+              <div class="text-xs ${pnlColor} font-medium">
+                ${pnlValSign}${currSym}${Math.abs(pnlVal).toLocaleString()} (${pnlPctSign}${pnlPct.toFixed(2)}%)
+              </div>
+            `;
+          }
+
+          return `
+            <div class="bg-slate-800/60 p-3.5 rounded-xl border border-slate-800 flex justify-between items-center">
+              <div class="space-y-1">
+                <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                  <span class="font-bold text-sm text-white">${a.name || a.symbol}</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${accBg}">${acc}</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${badgeBg}">${badgeText}</span>
+                </div>
+                <div class="text-[11px] text-slate-400 flex items-center space-x-2">
+                  ${subInfoHtml}
+                </div>
+              </div>
+
+              <div class="text-right space-y-0.5">
+                ${rightSideHtml}
+                <div class="flex items-center space-x-2 justify-end pt-0.5">
+                  <button onclick="openEditAssetByIndex(${index})" class="text-[10px] text-slate-400 hover:text-emerald-400">
+                    <i class="fa-solid fa-pen-to-square"></i> 수정
+                  </button>
+                  <button onclick="deleteAsset(${a.id || 0}, '${a.symbol}', '${a.account || "ISA"}')" class="text-[10px] text-slate-600 hover:text-rose-400">
+                    <i class="fa-regular fa-trash-can"></i> 삭제
+                  </button>
+                </div>
+              </div>
             </div>
           `;
-        } else {
-          rightSideHtml = `
-            <div class="font-bold text-xs text-slate-200">
-              <span class="privacy-target">${currSym}${a.eval_value.toLocaleString()}</span>
-              <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
-            </div>
-            <div class="text-xs ${pnlColor} font-medium">
-              ${pnlValSign}${currSym}${Math.abs(a.pnl).toLocaleString()} (${pnlPctSign}${a.pnl_pct.toFixed(2)}%)
-            </div>
-          `;
-        }
-
-        return `
-          <div class="bg-slate-800/60 p-3.5 rounded-xl border border-slate-800 flex justify-between items-center">
-            <div class="space-y-1">
-              <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                <span class="font-bold text-sm text-white">${a.name}</span>
-                <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${accBg}">${acc}</span>
-                <span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${badgeBg}">${badgeText}</span>
-              </div>
-              <div class="text-[11px] text-slate-400 flex items-center space-x-2">
-                ${subInfoHtml}
-              </div>
-            </div>
-
-            <div class="text-right space-y-0.5">
-              ${rightSideHtml}
-              <div class="flex items-center space-x-2 justify-end pt-0.5">
-                <button onclick='openEditAssetModal(${JSON.stringify(a).replace(/'/g, "&apos;")})' class="text-[10px] text-slate-400 hover:text-emerald-400">
-                  <i class="fa-solid fa-pen-to-square"></i> 수정
-                </button>
-                <button onclick="deleteAsset(${a.id || 0}, '${a.symbol}', '${a.account || "ISA"}')" class="text-[10px] text-slate-600 hover:text-rose-400">
-                  <i class="fa-regular fa-trash-can"></i> 삭제
-                </button>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
+        }).join('');
+      } catch (err) {
+        console.error("renderAssetsList 렌더링 에러:", err);
+        listEl.innerHTML = `<div class="text-center py-4 text-xs text-rose-400">자산 목록 표시 중 문제가 발생했습니다.</div>`;
+      }
     }
 
     // ================= REBALANCE & NEW CASH =================
