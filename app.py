@@ -194,7 +194,7 @@ def add_or_update_asset(data: dict):
     c.execute("""
         INSERT INTO assets (symbol, name, asset_type, currency, quantity, avg_price, current_price, target_weight, dividend_yield, div_frequency, account, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(symbol) DO UPDATE SET
+        ON CONFLICT(symbol, account) DO UPDATE SET
             name=excluded.name,
             asset_type=excluded.asset_type,
             currency=excluded.currency,
@@ -204,7 +204,6 @@ def add_or_update_asset(data: dict):
             target_weight=excluded.target_weight,
             dividend_yield=excluded.dividend_yield,
             div_frequency=excluded.div_frequency,
-            account=excluded.account,
             updated_at=CURRENT_TIMESTAMP
     """, (symbol, name, asset_type, currency, quantity, avg_price, current_price, target_weight, dividend_yield, div_frequency, account))
     conn.commit()
@@ -238,16 +237,26 @@ def update_target_weights(targets: list):
     conn = get_connection()
     c = conn.cursor()
     for t in targets:
-        c.execute("UPDATE assets SET target_weight = ? WHERE symbol = ?", (t["target_weight"], t["symbol"]))
+        if t.get("id"):
+            c.execute("UPDATE assets SET target_weight = ? WHERE id = ?", (t["target_weight"], t["id"]))
+        elif t.get("account"):
+            c.execute("UPDATE assets SET target_weight = ? WHERE symbol = ? AND account = ?", (t["target_weight"], t["symbol"], t["account"]))
+        else:
+            c.execute("UPDATE assets SET target_weight = ? WHERE symbol = ?", (t["target_weight"], t["symbol"]))
     conn.commit()
     conn.close()
     return {"status": "success"}
 
-@app.delete("/api/asset/{symbol}")
-def delete_asset(symbol: str):
+@app.delete("/api/asset/{identifier}")
+def delete_asset(identifier: str, account: str = None):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM assets WHERE symbol = ?", (symbol,))
+    if identifier.isdigit():
+        c.execute("DELETE FROM assets WHERE id = ?", (int(identifier),))
+    elif account:
+        c.execute("DELETE FROM assets WHERE symbol = ? AND account = ?", (identifier, account))
+    else:
+        c.execute("DELETE FROM assets WHERE symbol = ?", (identifier,))
     conn.commit()
     conn.close()
     return {"status": "success"}

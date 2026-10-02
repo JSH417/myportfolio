@@ -17,7 +17,7 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS assets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        symbol TEXT NOT NULL UNIQUE,       -- 예: '069500'(KODEX 200), 'VOO', 'USD_RP'(달러RP)
+        symbol TEXT NOT NULL,
         name TEXT NOT NULL,                 -- 예: 'KODEX 200', 'Vanguard S&P 500 ETF', '외화RP'
         asset_type TEXT NOT NULL,          -- 'KR_ETF', 'US_ETF', 'USD_RP', 'CASH_KRW', 'CASH_USD'
         currency TEXT NOT NULL,            -- 'KRW' or 'USD'
@@ -29,14 +29,43 @@ def init_db():
         div_frequency TEXT DEFAULT 'QUARTERLY', -- 'MONTHLY', 'QUARTERLY', 'YEARLY', 'NONE'
         account TEXT DEFAULT 'ISA',        -- 'CMA', 'ISA', '연금저축', '달러RP'
         note TEXT,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(symbol, account)            -- 계좌별로 동일 종목 복수 보유 허용
     );
     """)
 
-    # 계좌 컬럼 자동 마이그레이션 확인
-    cols = [r[1] for r in cursor.execute("PRAGMA table_info(assets)").fetchall()]
-    if "account" not in cols:
-        cursor.execute("ALTER TABLE assets ADD COLUMN account TEXT DEFAULT 'ISA'")
+    # 계좌별 동일 종목 복수 보유 허용을 위한 복합 유니크(symbol, account) 마이그레이션
+    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='assets'")
+    table_sql_row = cursor.fetchone()
+    if table_sql_row:
+        table_sql = table_sql_row[0]
+        if "UNIQUE(symbol, account)" not in table_sql and "UNIQUE (symbol, account)" not in table_sql:
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assets_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL,
+                name TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                currency TEXT NOT NULL,
+                quantity REAL NOT NULL DEFAULT 0,
+                avg_price REAL NOT NULL DEFAULT 0,
+                current_price REAL DEFAULT 0,
+                target_weight REAL DEFAULT 0,
+                dividend_yield REAL DEFAULT 0,
+                div_frequency TEXT DEFAULT 'QUARTERLY',
+                account TEXT DEFAULT 'ISA',
+                note TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(symbol, account)
+            );
+            """)
+            cursor.execute("""
+            INSERT OR IGNORE INTO assets_v2 
+            SELECT id, symbol, name, asset_type, currency, quantity, avg_price, current_price, target_weight, dividend_yield, div_frequency, COALESCE(account, 'ISA'), note, updated_at 
+            FROM assets;
+            """)
+            cursor.execute("DROP TABLE assets;")
+            cursor.execute("ALTER TABLE assets_v2 RENAME TO assets;")
 
     # 2. Transactions table (매매 및 입출금 내역)
     cursor.execute("""

@@ -1209,8 +1209,8 @@
       listEl.innerHTML = assets.map(a => {
         const isUSD = a.currency === 'USD';
         const isCashType = a.asset_type === 'USD_RP' || a.asset_type.startsWith('CASH');
-        const currSym = isUSD ? '$' : '₩';
-        const pnlSign = a.pnl >= 0 ? '+' : '';
+        const pnlValSign = a.pnl > 0 ? '+' : (a.pnl < 0 ? '-' : '');
+        const pnlPctSign = a.pnl_pct > 0 ? '+' : '';
         const pnlColor = a.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400';
         
         let badgeBg = 'bg-slate-700 text-slate-300';
@@ -1234,9 +1234,11 @@
 
         let subInfoHtml = '';
         if (isCashType) {
-          const rateNote = isUSD ? `약 ₩${Math.round(a.eval_value_krw).toLocaleString()}` : '';
-          const interestNote = a.dividend_yield > 0 ? ` • 약정금리 연 ${a.dividend_yield}%` : '';
-          subInfoHtml = `<span class="text-slate-300 font-medium font-mono privacy-target">${currSym}${a.eval_value.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span> <span class="text-slate-500 text-[10px]">(${rateNote}${interestNote})</span>`;
+          let noteParts = [];
+          if (isUSD) noteParts.push(`약 ₩${Math.round(a.eval_value_krw).toLocaleString()}`);
+          if (a.dividend_yield > 0) noteParts.push(`약정금리 연 ${a.dividend_yield}%`);
+          const extraNote = noteParts.length > 0 ? ` (${noteParts.join(' • ')})` : '';
+          subInfoHtml = `<span class="text-slate-300 font-medium font-mono privacy-target">${currSym}${a.eval_value.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span> <span class="text-slate-500 text-[10px]">${extraNote}</span>`;
         } else {
           subInfoHtml = `
             <span>${a.quantity.toLocaleString()}주</span>
@@ -1285,7 +1287,7 @@
               <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
             </div>
             <div class="text-xs ${pnlColor} font-medium">
-              ${pnlSign}${currSym}${Math.abs(a.pnl).toLocaleString()} (${pnlSign}${a.pnl_pct.toFixed(2)}%)
+              ${pnlValSign}${currSym}${Math.abs(a.pnl).toLocaleString()} (${pnlPctSign}${a.pnl_pct.toFixed(2)}%)
             </div>
           `;
         }
@@ -1309,7 +1311,7 @@
                 <button onclick='openEditAssetModal(${JSON.stringify(a).replace(/'/g, "&apos;")})' class="text-[10px] text-slate-400 hover:text-emerald-400">
                   <i class="fa-solid fa-pen-to-square"></i> 수정
                 </button>
-                <button onclick="deleteAsset('${a.symbol}')" class="text-[10px] text-slate-600 hover:text-rose-400">
+                <button onclick="deleteAsset(${a.id || 0}, '${a.symbol}', '${a.account || "ISA"}')" class="text-[10px] text-slate-600 hover:text-rose-400">
                   <i class="fa-regular fa-trash-can"></i> 삭제
                 </button>
               </div>
@@ -2044,9 +2046,11 @@
       loadSummary();
     }
 
-    async function deleteAsset(symbol) {
-      if (!confirm(`'${symbol}' 자산을 삭제하시겠습니까?`)) return;
-      await fetch(`/api/asset/${symbol}`, { method: 'DELETE' });
+    async function deleteAsset(id, symbol, account) {
+      const accText = account ? ` [${account}]` : '';
+      if (!confirm(`'${symbol}'${accText} 자산을 삭제하시겠습니까?`)) return;
+      const url = id ? `/api/asset/${id}` : `/api/asset/${symbol}?account=${encodeURIComponent(account || 'ISA')}`;
+      await fetch(url, { method: 'DELETE' });
       loadSummary();
     }
 
