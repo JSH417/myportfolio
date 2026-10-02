@@ -624,8 +624,8 @@
 
           <div class="grid grid-cols-3 gap-2" id="group-qty-avg">
             <div>
-              <label class="text-slate-400 block mb-1" id="label-qty">보유 주수</label>
-              <input type="number" step="any" id="form-qty" placeholder="10" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+              <label class="text-slate-400 block mb-1" id="label-qty">보유 주수 <span class="text-[10px] text-emerald-400 font-normal">(매수 전: 0)</span></label>
+              <input type="number" step="any" id="form-qty" placeholder="10 (매수전 0)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
             </div>
             <div>
               <label class="text-slate-400 block mb-1" id="label-avg">매입 단가</label>
@@ -1231,17 +1231,18 @@
     function renderAllocationChart(assets) {
       const container = document.getElementById('allocation-chart');
       if (!container) return;
-      if (!assets || assets.length === 0) {
+      const heldAssets = (assets || []).filter(a => (Number(a.eval_value_krw) || 0) > 0 || (Number(a.quantity) || 0) > 0);
+      if (heldAssets.length === 0) {
         if (donutChart) {
           try { donutChart.destroy(); } catch(e){}
           donutChart = null;
         }
-        container.innerHTML = `<div class="text-center py-10 text-xs text-slate-500">등록된 자산이 없습니다.</div>`;
+        container.innerHTML = `<div class="text-center py-10 text-xs text-slate-500">보유 중인 자산이 없습니다.</div>`;
         return;
       }
       container.innerHTML = '';
-      const labels = assets.map(a => a.name);
-      const series = assets.map(a => a.weight_pct);
+      const labels = heldAssets.map(a => a.name);
+      const series = heldAssets.map(a => a.weight_pct || 0);
 
       const options = {
         series: series,
@@ -1313,12 +1314,19 @@
           }
 
           let subInfoHtml = '';
+          const isWaitingBuy = (!isCashType && qty === 0);
           if (isCashType) {
             let noteParts = [];
             if (isUSD) noteParts.push(`약 ₩${Math.round(evalValKrw).toLocaleString()}`);
             if (a.dividend_yield > 0) noteParts.push(`약정금리 연 ${a.dividend_yield}%`);
             const extraNote = noteParts.length > 0 ? ` (${noteParts.join(' • ')})` : '';
             subInfoHtml = `<span class="text-slate-300 font-medium font-mono privacy-target">${currSym}${evalVal.toLocaleString(undefined, {minimumFractionDigits: isUSD ? 2 : 0})}</span> <span class="text-slate-500 text-[10px]">${extraNote}</span>`;
+          } else if (isWaitingBuy) {
+            subInfoHtml = `
+              <span class="text-amber-400 font-medium">0주 (매수 대기)</span>
+              <span>•</span>
+              <span>현재가 ${currSym}${curP.toLocaleString()}</span>
+            `;
           } else {
             subInfoHtml = `
               <span>${qty.toLocaleString()}주</span>
@@ -1360,6 +1368,16 @@
                 ${earnBadge ? `${earnBadge} (연 ${a.dividend_yield}%)` : `현금 자산`}
               </div>
             `;
+          } else if (isWaitingBuy) {
+            rightSideHtml = `
+              <div class="font-bold text-xs text-slate-200">
+                <span class="text-amber-400 font-bold">목표 ${a.target_weight || 0}%</span>
+                <span class="text-[10px] text-slate-500 font-normal">(${displayWeight}%)</span>
+              </div>
+              <div class="text-[11px] text-slate-400 font-medium">
+                매수 예정 종목
+              </div>
+            `;
           } else {
             rightSideHtml = `
               <div class="font-bold text-xs text-slate-200">
@@ -1379,6 +1397,7 @@
                   <span class="font-bold text-sm text-white">${a.name || a.symbol}</span>
                   <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${accBg}">${acc}</span>
                   <span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${badgeBg}">${badgeText}</span>
+                  ${isWaitingBuy ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">매수 예정</span>` : ''}
                 </div>
                 <div class="text-[11px] text-slate-400 flex items-center space-x-2">
                   ${subInfoHtml}
@@ -1683,6 +1702,12 @@
 
     // Modal: Target Weights Edit
     let modalSelectedAccount = 'ALL';
+    let modalWeightInputs = {};
+
+    function getAssetKey(a) {
+      if (a.id) return 'id_' + a.id;
+      return 'sym_' + (a.symbol || '') + '_' + (a.account || 'ISA');
+    }
 
     function openEditTargetWeightsModal() {
       // 메인 화면에서 단일 계좌를 보고 있었다면 그 계좌를 기본 선택, 아니면 ALL
@@ -1691,6 +1716,14 @@
       } else {
         modalSelectedAccount = 'ALL';
       }
+
+      modalWeightInputs = {};
+      if (summaryData && summaryData.assets) {
+        summaryData.assets.forEach(a => {
+          modalWeightInputs[getAssetKey(a)] = a.target_weight != null ? Number(a.target_weight) : 0;
+        });
+      }
+
       renderTargetWeightsModal();
       document.getElementById('modal-target-weights').classList.remove('hidden');
     }
@@ -1698,6 +1731,13 @@
     function filterTargetWeightsModal(acc) {
       modalSelectedAccount = acc;
       renderTargetWeightsModal();
+    }
+
+    function onTargetWeightInput(inp) {
+      const key = inp.getAttribute('data-key');
+      const val = parseFloat(inp.value) || 0;
+      modalWeightInputs[key] = val;
+      calcTargetWeightsSum();
     }
 
     function renderTargetWeightsModal() {
@@ -1734,6 +1774,8 @@
       }
 
       container.innerHTML = assetsToDisplay.map(a => {
+        const key = getAssetKey(a);
+        const currentVal = modalWeightInputs[key] != null ? modalWeightInputs[key] : (a.target_weight || 0);
         const acc = a.account || 'ISA';
         let accBg = 'bg-slate-700 text-slate-300';
         if (acc === 'ISA') accBg = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
@@ -1741,18 +1783,23 @@
         else if (acc === '연금저축') accBg = 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
         else if (acc === '달러RP') accBg = 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
 
+        const isCash = (a.asset_type === 'USD_RP' || (a.asset_type && a.asset_type.startsWith('CASH')));
+        const isWaiting = (!isCash && (Number(a.quantity) || 0) === 0);
+
         return `
           <div class="flex justify-between items-center text-xs bg-slate-900/40 p-2 rounded-lg border border-slate-700/40">
             <div class="flex items-center space-x-1.5 truncate pr-2">
               <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${accBg}">${acc}</span>
               <span class="text-slate-200 font-medium truncate">${a.name}</span>
+              ${isWaiting ? '<span class="text-[9px] px-1 py-0.5 rounded font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">매수 예정</span>' : ''}
             </div>
             <div class="flex items-center space-x-1 shrink-0">
-              <input type="number" step="any" value="${a.target_weight || 0}" 
+              <input type="number" step="any" value="${currentVal}" 
                 data-id="${a.id || 0}" 
                 data-symbol="${a.symbol}" 
                 data-account="${a.account || 'ISA'}"
-                oninput="calcTargetWeightsSum()" 
+                data-key="${key}"
+                oninput="onTargetWeightInput(this)" 
                 class="tw-input w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right text-emerald-400 font-bold focus:border-emerald-500 focus:outline-none">
               <span class="text-slate-400 font-semibold">%</span>
             </div>
@@ -1769,9 +1816,16 @@
 
     function calcTargetWeightsSum() {
       let sum = 0;
-      document.querySelectorAll('.tw-input').forEach(inp => {
-        sum += parseFloat(inp.value) || 0;
-      });
+      if (summaryData && summaryData.assets) {
+        let assetsToSum = summaryData.assets;
+        if (modalSelectedAccount !== 'ALL') {
+          assetsToSum = summaryData.assets.filter(a => (a.account || 'ISA') === modalSelectedAccount);
+        }
+        assetsToSum.forEach(a => {
+          const key = getAssetKey(a);
+          sum += Number(modalWeightInputs[key] || 0);
+        });
+      }
       const sumEl = document.getElementById('target-weights-sum');
       if (sumEl) {
         sumEl.innerText = `${sum.toFixed(1)}%`;
@@ -1784,44 +1838,41 @@
       if (saveBtn) saveBtn.innerText = '저장 중...';
 
       const payload = [];
-      document.querySelectorAll('.tw-input').forEach(inp => {
-        const id = parseInt(inp.getAttribute('data-id')) || 0;
-        const sym = inp.getAttribute('data-symbol');
-        const acc = inp.getAttribute('data-account');
-        const tw = parseFloat(inp.value) || 0;
-        payload.push({
-          id: id,
-          symbol: sym,
-          account: acc,
-          target_weight: tw
+      if (summaryData && summaryData.assets) {
+        summaryData.assets.forEach(a => {
+          const key = getAssetKey(a);
+          const tw = modalWeightInputs[key] != null ? Number(modalWeightInputs[key]) : (Number(a.target_weight) || 0);
+          a.target_weight = tw;
+          payload.push({
+            id: a.id || 0,
+            symbol: a.symbol,
+            account: a.account || 'ISA',
+            target_weight: tw
+          });
         });
 
-        // 1. summaryData 메모리 즉시 동기화 (지연 없이 즉각 반영!)
-        if (summaryData && summaryData.assets) {
-          const target = summaryData.assets.find(x => (id > 0 && x.id === id) || (x.symbol === sym && (x.account || 'ISA') === acc));
-          if (target) {
-            target.target_weight = tw;
-          }
-        }
-      });
-
-      // 2. 브라우저 로컬 스토리지 백업도 즉시 갱신
-      if (summaryData && summaryData.assets) {
+        // 1. 브라우저 로컬 스토리지 백업도 즉시 갱신 (지연 없이 즉시 반영)
         localStorage.setItem('portfolio_assets_backup', JSON.stringify(summaryData.assets));
       }
 
       try {
-        await fetch('/api/target-weights', {
+        const res = await fetch('/api/target-weights', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ targets: payload })
         });
+        if (!res.ok) {
+          console.warn("Target weights API warning:", res.status);
+        }
 
         closeEditTargetWeightsModal();
         renderRebalanceTab();
         await loadSummary();
       } catch (err) {
-        alert("목표 비중 저장 실패: " + err.message);
+        console.error("목표 비중 저장 실패:", err);
+        closeEditTargetWeightsModal();
+        renderRebalanceTab();
+        await loadSummary();
       } finally {
         if (saveBtn) saveBtn.innerText = '저장하기';
       }
@@ -2251,12 +2302,12 @@
         labelYield.innerText = '예상 배당률 (%)';
 
         if (type === 'KR_ETF') {
-          document.getElementById('label-qty').innerText = '보유 주수';
+          document.getElementById('label-qty').innerHTML = '보유 주수 <span class="text-[10px] text-emerald-400 font-normal">(매수 전: 0)</span>';
           document.getElementById('label-avg').innerText = '평단가 (원)';
           const curLabel = document.getElementById('label-current-price');
           if (curLabel) curLabel.innerText = '현재가 (원)';
         } else if (type === 'US_ETF') {
-          document.getElementById('label-qty').innerText = '보유 주수';
+          document.getElementById('label-qty').innerHTML = '보유 주수 <span class="text-[10px] text-emerald-400 font-normal">(매수 전: 0)</span>';
           document.getElementById('label-avg').innerText = '평단가 ($)';
           const curLabel = document.getElementById('label-current-price');
           if (curLabel) curLabel.innerText = '현재가 ($)';
@@ -2285,9 +2336,17 @@
       } else {
         qty = parseFloat(document.getElementById('form-qty').value);
         avg = parseFloat(document.getElementById('form-avg').value);
-        if (isNaN(qty) || isNaN(avg) || qty <= 0) {
-          alert("수량과 평단가를 올바르게 입력해주세요.");
+        if (isNaN(qty) || qty < 0) {
+          alert("수량을 올바르게 입력해주세요 (매수 전 종목은 0 입력 가능).");
           return;
+        }
+        if (qty === 0) {
+          if (isNaN(avg) || avg < 0) avg = 0;
+        } else {
+          if (isNaN(avg) || avg <= 0) {
+            alert("평단가를 올바르게 입력해주세요.");
+            return;
+          }
         }
       }
 
@@ -2305,7 +2364,10 @@
         if (!isNaN(manualCurPrice) && manualCurPrice > 0) {
           curPrice = manualCurPrice;
         } else {
-          curPrice = searchedCurrentPrice > 0 ? searchedCurrentPrice : avg;
+          curPrice = searchedCurrentPrice > 0 ? searchedCurrentPrice : (avg > 0 ? avg : 1.0);
+        }
+        if (avg === 0 && curPrice > 0) {
+          avg = curPrice;
         }
       }
 

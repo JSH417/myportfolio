@@ -1,6 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from typing import Any, Union, List, Dict
 import os
 import uvicorn
 from database import init_db, get_connection
@@ -233,7 +234,14 @@ def update_cma_rate(data: dict):
     return {"status": "success", "new_rate": rate}
 
 @app.post("/api/target-weights")
-def update_target_weights(targets: list):
+def update_target_weights(data: Any = Body(...)):
+    if isinstance(data, list):
+        targets = data
+    elif isinstance(data, dict):
+        targets = data.get("targets", [])
+    else:
+        targets = []
+
     conn = get_connection()
     c = conn.cursor()
     for t in targets:
@@ -252,7 +260,7 @@ def update_target_weights(targets: list):
             c.execute("UPDATE assets SET target_weight = ? WHERE symbol = ?", (tw, t["symbol"]))
     conn.commit()
     conn.close()
-    return {"status": "success"}
+    return {"status": "success", "updated_count": len(targets)}
 
 @app.delete("/api/asset/{identifier}")
 def delete_asset(identifier: str, account: str = None):
