@@ -29,6 +29,18 @@ PROMPT_OCR_PORTFOLIO = """
 3. 달러 RP(외화 RP), 외화 CMM/예수금 등의 자산도 절대 누락하지 말고 반드시 포함하라.
 """
 
+def _call_gemini(client, contents):
+    # Google AI Studio에서 지원되는 모델들을 순차적으로 시도
+    candidate_models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite']
+    last_err = None
+    for m in candidate_models:
+        try:
+            return client.models.generate_content(model=m, contents=contents)
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err
+
 def parse_portfolio_image(image_bytes: bytes, mime_type: str = "image/jpeg", api_key: str = None) -> List[Dict[str, Any]]:
     """
     Gemini Vision API를 활용하여 계좌 캡처 이미지에서 자산 리스트(JSON)를 추출
@@ -42,8 +54,8 @@ def parse_portfolio_image(image_bytes: bytes, mime_type: str = "image/jpeg", api
 
     try:
         client = genai.Client(api_key=key)
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
+        response = _call_gemini(
+            client,
             contents=[
                 types.Part.from_bytes(
                     data=image_bytes,
@@ -79,10 +91,7 @@ def parse_trade_text(text: str, api_key: str = None) -> List[Dict[str, Any]]:
         입력 텍스트:
         {text}
         """
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
+        response = _call_gemini(client, contents=prompt)
         raw = response.text.strip()
         raw = re.sub(r'^```json\s*', '', raw)
         raw = re.sub(r'\s*```$', '', raw)
