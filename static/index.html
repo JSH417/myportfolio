@@ -475,12 +475,16 @@
                 <span class="font-medium text-white">TIGER 미국배당다우존스</span>
                 <span class="text-[10px] text-emerald-400 font-mono">458730</span>
               </div>
+              <div onclick="selectPresetSymbol('360750')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
+                <span class="font-medium text-white">TIGER 미국S&P500 (25,780원)</span>
+                <span class="text-[10px] text-emerald-400 font-mono">360750</span>
+              </div>
               <div onclick="selectPresetSymbol('379810')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
                 <span class="font-medium text-white">KODEX 미국나스닥100</span>
                 <span class="text-[10px] text-emerald-400 font-mono">379810</span>
               </div>
               <div onclick="selectPresetSymbol('379800')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
-                <span class="font-medium text-white">TIGER 미국S&P500</span>
+                <span class="font-medium text-white">KODEX 미국S&P500</span>
                 <span class="text-[10px] text-emerald-400 font-mono">379800</span>
               </div>
               <div onclick="selectPresetSymbol('069500')" class="p-2 hover:bg-slate-700/60 rounded-lg cursor-pointer flex justify-between items-center">
@@ -1353,28 +1357,27 @@
     }
 
     let tickerDebounceTimer = null;
+    let searchedCurrentPrice = 0;
+
     function handleTickerInput(val) {
       val = val.trim();
       const statusEl = document.getElementById('ticker-search-status');
       const nameInput = document.getElementById('form-name');
 
-      // 입력 중이거나 비어있을 때는 종목명 칸에 숫자를 채우지 않고 빈칸 유지
       if (!val) {
         nameInput.value = '';
+        searchedCurrentPrice = 0;
         return;
       }
 
-      // 유효한 정식 조회가 끝나기 전까지는 종목명에 숫자가 뜨지 않도록 비워둠
       clearTimeout(tickerDebounceTimer);
 
-      // 국내 6자리 또는 미국 티커(1글자 이상)일 때만 조회 실행
       tickerDebounceTimer = setTimeout(async () => {
         statusEl.classList.remove('hidden');
         try {
           const res = await fetch(`/api/lookup-ticker/${encodeURIComponent(val)}`);
           if (res.ok) {
             const info = await res.json();
-            // 티커와 정확히 다른 유효한 실제 이름이 반환되었을 때만 채움
             if (info && info.name && info.name !== val && info.name !== symbolWithoutKS(val)) {
               nameInput.value = info.name;
               
@@ -1383,14 +1386,19 @@
                 handleAssetTypeChange();
               }
               if (info.current_price && info.current_price > 0) {
-                document.getElementById('form-avg').value = info.current_price;
+                searchedCurrentPrice = info.current_price;
+                const avgInput = document.getElementById('form-avg');
+                // 평단가가 비어있으면 현재가를 추천 평단가로 제안
+                if (!avgInput.value) {
+                  avgInput.value = info.current_price;
+                }
               }
               if (info.dividend_yield !== undefined) {
                 document.getElementById('form-dividend-yield').value = info.dividend_yield;
               }
             } else {
-              // 아직 유효한 종목이 검색되지 않은 상태(숫자 입력 중)일 땐 빈칸 유지
               nameInput.value = '';
+              searchedCurrentPrice = 0;
             }
           }
         } catch (e) {
@@ -1533,11 +1541,14 @@
       }
       const currency = (type === 'US_ETF' || type === 'USD_RP' || type === 'CASH_USD') ? 'USD' : 'KRW';
 
+      // 종목의 실시간 현재가 유지 (평단가로 덮어쓰지 않음)
+      const curPrice = searchedCurrentPrice > 0 ? searchedCurrentPrice : avg;
+
       await fetch('/api/asset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          symbol, name, asset_type: type, currency, quantity: qty, avg_price: avg, current_price: avg, target_weight: tw, dividend_yield: dy
+          symbol, name, asset_type: type, currency, quantity: qty, avg_price: avg, current_price: curPrice, target_weight: tw, dividend_yield: dy
         })
       });
 
