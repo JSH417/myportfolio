@@ -90,17 +90,18 @@ def get_portfolio_summary():
     total_pnl_krw = total_val_krw - total_invested_krw
     total_pnl_pct = (total_pnl_krw / total_invested_krw * 100) if total_invested_krw > 0 else 0.0
 
-    # 당일 총자산 히스토리 자동 기록 (1일 1회 최신화)
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
-    c.execute("""
-        INSERT INTO portfolio_history (record_date, total_val_krw, total_val_usd, total_invested_krw)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(record_date) DO UPDATE SET
-            total_val_krw=excluded.total_val_krw,
-            total_val_usd=excluded.total_val_usd,
-            total_invested_krw=excluded.total_invested_krw
-    """, (today_str, total_val_krw, total_val_usd, total_invested_krw))
-    conn.commit()
+    # 당일 총자산 히스토리 자동 기록 (실제 보유 자산이 있을 때만 기록)
+    if total_val_krw > 0:
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        c.execute("""
+            INSERT INTO portfolio_history (record_date, total_val_krw, total_val_usd, total_invested_krw)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(record_date) DO UPDATE SET
+                total_val_krw=excluded.total_val_krw,
+                total_val_usd=excluded.total_val_usd,
+                total_invested_krw=excluded.total_invested_krw
+        """, (today_str, total_val_krw, total_val_usd, total_invested_krw))
+        conn.commit()
     conn.close()
 
     # 비중 및 리밸런싱/배당 분석
