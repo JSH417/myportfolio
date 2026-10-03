@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 tunnel_url.txt
 .git
+scratch/

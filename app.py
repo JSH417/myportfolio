@@ -321,5 +321,15 @@ def parse_text(data: dict):
     result = parser.parse_trade_text(raw_text, api_key=api_key)
     return result
 
+@app.get("/api/db-status")
+def get_db_status():
+    db_url = os.getenv("DATABASE_URL")
+    if db_url and (db_url.startswith("postgres://") or db_url.startswith("postgresql://")):
+        import re
+        masked_url = re.sub(r':([^@]+)@', ':****@', db_url)
+        return {"mode": "cloud", "type": "PostgreSQL (Cloud DB)", "url": masked_url}
+    return {"mode": "local", "type": "SQLite (Local File)", "message": "Render 영구 보존을 위해 무료 클라우드 DB(Render Postgres, Supabase, Neon) 연결 지원"}
+
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+
