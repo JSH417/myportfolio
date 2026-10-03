@@ -8,7 +8,7 @@ DB_FILE = os.path.join(os.path.dirname(__file__), "portfolio.db")
 DEFAULT_ASSETS = [
     ("360750", "TIGER 미국배당다우존스", "KR_ETF", "KRW", 1.0, 15220.0, 14055.0, 0.0, 3.8, "MONTHLY", "연금저축"),
     ("360200", "TIGER 미국S&P500", "KR_ETF", "KRW", 294.0, 27196.0, 25780.0, 0.0, 1.5, "QUARTERLY", "ISA"),
-    ("133690", "KODEX 미국나스닥100", "KR_ETF", "KRW", 93.0, 27721.0, 27385.0, 0.0, 0.5, "QUARTERLY", "ISA"),
+    ("379810", "KODEX 미국나스닥100TR", "KR_ETF", "KRW", 93.0, 27721.0, 27385.0, 0.0, 0.5, "QUARTERLY", "ISA"),
     ("411060", "ACE KRX금현물", "KR_ETF", "KRW", 22.0, 26063.0, 25515.0, 0.0, 0.0, "NONE", "ISA"),
     ("453850", "ACE 미국30년국채액티브", "KR_ETF", "KRW", 0.0, 8270.0, 8270.0, 20.0, 4.2, "MONTHLY", "ISA"),
     ("360750", "TIGER 미국배당다우존스", "KR_ETF", "KRW", 217.0, 14543.0, 14055.0, 0.0, 3.8, "MONTHLY", "ISA"),
